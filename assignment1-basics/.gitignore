@@ -163,4 +163,5 @@ cython_debug/
 *.zip
 *.pdf
 data/
+.DS_Store
 cs336_basics/pretokenization_parallel.py
