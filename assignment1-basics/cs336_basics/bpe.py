@@ -57,7 +57,7 @@ def train_bpe(
     ]
     pair_locations, pair_counts = _get_pair_count(pre_tokens)
     merges = _merge(pre_tokens, pair_counts, pair_locations, merge_time)
-    
+
     # 4. compute vocabs
     idx = len(vocab)
     for (t0, t1) in merges:
@@ -126,7 +126,7 @@ def _merge_pair(
             byte pair merged into single tokens.
     """
     new_token: list[bytes] = []
-    
+
     i = 0
     while i < len(tokens):
         if i < (len(tokens) - 1) and tokens[i] == pair[0] and tokens[i + 1] == pair[1]:
@@ -136,15 +136,14 @@ def _merge_pair(
             new_token.append(tokens[i])
             i += 1
     return new_token
-    
-    
+
+
 def _merge(
         pre_tokens: list[list[bytes]],
         pair_counts: defaultdict[tuple[bytes, bytes], int],
         pair_locations: defaultdict[tuple[bytes, bytes], set],
         merge_time: int
 ) -> list[tuple[bytes, bytes]]:
-
     """
         Perform BPE merges by iteratively merging the most frequent byte pair.
         This function executes a specified number of byte pair merges on a collection of
@@ -175,13 +174,13 @@ def _merge(
         # 这样会先按 count 降序（因为 max 取最大值），count 相同时再按 pair 本身的字典序升序（tuple 默认字典序比较）选择最大的 pair。
         top_pair = max(pair_counts, key=lambda x: (pair_counts[x], x))
         merges.append(top_pair)
-        
+
         affected_tokens = pair_locations[top_pair].copy()
         for j in affected_tokens:
             token = pre_tokens[j]
             if len(token) < 2:
                 continue
-            
+
             # Decrement all pair counts in affected token
             for pair in zip(token, token[1:]):
                 pair_counts[pair] -= 1
@@ -194,7 +193,7 @@ def _merge(
             for pair in zip(token, token[1:]):
                 pair_counts[pair] += 1
                 pair_locations[pair].add(j)
-            
+
             pre_tokens[j] = token
     return merges
 
@@ -307,7 +306,8 @@ def _process_chunk(
     for c in chunks_without_spe_token:
         if not c.strip():
             continue
-        tokens = [match.group(0).encode("utf-8") for match in pattern.finditer(c)]
+        tokens = [match.group(0).encode("utf-8")
+                  for match in pattern.finditer(c)]
         for token in tokens:
             pre_tokens.append([bytes([b]) for b in token])
     return pre_tokens
