@@ -1,7 +1,5 @@
 import regex as re
 import os
-from .constants import PAT
-
 
 class BPETokenizer:
     def __init__(self,
