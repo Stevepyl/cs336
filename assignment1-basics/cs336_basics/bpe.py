@@ -1,4 +1,6 @@
 import os
+from secrets import token_bytes
+import time
 import regex as re
 from typing import BinaryIO
 from multiprocessing import get_context
@@ -11,7 +13,7 @@ def train_bpe(
     input_path: str | os.PathLike,
     vocab_size: int,
     special_tokens: list[str],
-    num_processes: int = 16
+    num_processes: int = 8
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """
     Given a path to an input text file, trains a (byte-level) BPE
@@ -40,23 +42,31 @@ def train_bpe(
     # Attention: Here the merge_time is NOT `vocab_size - 256`, we also need to consider special_tokens,
     # cause they're also part of vocab, so using vocab_size - len(vocab)
 
+    global_token_counts: defaultdict[bytes, int] = defaultdict(int)
     # 2. Pre-tokenization
     with open(input_path, "rb") as f:
         boundaries = _find_chunk_boundaries(
             f, num_processes, "<|endoftext|>".encode("utf-8"))
 
     with get_context("forkserver").Pool(processes=num_processes) as pool:
-        chunk_results: list[list[list[bytes]]] = pool.starmap(_process_chunk, [
+        for chunk_counts in pool.starmap(_process_chunk, [
             (input_path, start, end, special_tokens)
             for start, end in zip(boundaries[:-1], boundaries[1:])
-        ])
+        ]):
+            for token, count in chunk_counts.items():
+                global_token_counts[token] += count
 
     # 3. Compute merges
-    pre_tokens: list[list[bytes]] = [
-        tokens for result in chunk_results for tokens in result
-    ]
-    pair_locations, pair_counts = _get_pair_count(pre_tokens)
-    merges = _merge(pre_tokens, pair_counts, pair_locations, merge_time)
+    pre_tokens: dict[bytes, list[bytes]] = {}
+    for token in global_token_counts:
+        pre_tokens[token] = list(bytes([b]) for b in token)
+        
+    pair_to_tokens, pair_counts = _get_pair_count(global_token_counts, pre_tokens)
+        
+    merge_start_time = time.perf_counter()
+    merges = _merge(pre_tokens, global_token_counts, pair_counts, pair_to_tokens, merge_time)
+    merge_end_time = time.perf_counter()
+    print(f"\nTime using of merges: {merge_end_time - merge_start_time:.2f}")
 
     # 4. compute vocabs
     idx = len(vocab)
@@ -76,7 +86,8 @@ def _init_vocab(special_tokens: list[str]) -> dict[int, bytes]:
 
 
 def _get_pair_count(
-    pre_tokens: list[list[bytes]]
+    pre_token_counts: defaultdict[bytes, int],
+    pre_tokens: dict[bytes, list[bytes]]
 ) -> tuple[
     defaultdict[tuple[bytes, bytes], set],
     defaultdict[tuple[bytes, bytes], int]
@@ -88,29 +99,30 @@ def _get_pair_count(
 
     Returns:
         tuple[ defaultdict[tuple[bytes, bytes], set], defaultdict[tuple[bytes, bytes], int] ]: 
-            pair_to_indices: defaultdict[tuple[bytes, bytes], set]
-                pair_to_indices 维护了一个从字节对到包含该字节对的 token 索引集合的映射
+            pair_to_tokens: defaultdict[tuple[bytes, bytes], set]
+                pair_to_tokens 维护了一个从字节对到包含该字节对的 token 集合的映射
                 例如：
                 {
-                    (72, 101): {0, 5, 12},  # 字节对 (72, 101) 出现在索引 0, 5, 12 的 token 中
-                    (101, 108): {0, 8},      # 字节对 (101, 108) 出现在索引 0, 8 的 token 中
+                    (h, e): {b'hello', b'she', b'he', },  # 字节对 (h, e)出现在 token b'hello', b'she', b'he'中
+                    (t, h): {b'the', b'they'},      # 字节对 (t, h) 出现在token the以及they 中
                     ...
                 }
-                没有 pair_to_indices 的情况：
+                没有 pair_to_tokens 的情况：
                     当找到最频繁的字节对 max_pair 时，需要遍历所有 token 来查找哪些包含这个字节对
                     时间复杂度：O(n)，其中 n 是 token 总数
-                有了 pair_to_indices 的情况：
+                有了 pair_to_tokens 的情况：
                     直接获取包含 max_pair 的所有 token 索引，然后更新这一个pair所在的token
                     时间复杂度：O(k)，其中 k 是包含该字节对的 token 数量（通常 k << n）
             counts: defaultdict[tuple[bytes, bytes], int]
     """
-    pair_locations = defaultdict(set)
-    counts = defaultdict(int)
-    for i, tokens in enumerate(pre_tokens):
-        for pair in zip(tokens, tokens[1:]):
-            pair_locations[pair].add(i)
-            counts[pair] += 1
-    return pair_locations, counts
+    pair_to_tokens = defaultdict(set)
+    pair_counts = defaultdict(int)
+    for token, count in pre_token_counts.items():
+        token_bytes = pre_tokens[token]
+        for pair in zip(token_bytes, token_bytes[1:]):
+            pair_counts[pair] += count
+            pair_to_tokens[pair].add(token)
+    return pair_to_tokens, pair_counts
 
 
 def _merge_pair(
@@ -139,9 +151,10 @@ def _merge_pair(
 
 
 def _merge(
-        pre_tokens: list[list[bytes]],
+        pre_tokens: dict[bytes, list[bytes]],
+        pre_token_counts: defaultdict[bytes, int],
         pair_counts: defaultdict[tuple[bytes, bytes], int],
-        pair_locations: defaultdict[tuple[bytes, bytes], set],
+        pair_to_tokens: defaultdict[tuple[bytes, bytes], set],
         merge_time: int
 ) -> list[tuple[bytes, bytes]]:
     """
@@ -155,7 +168,7 @@ def _merge(
                 as a list of bytes. This list is modified in-place during merging.
             pair_counts: A dictionary mapping byte pairs to their occurrence counts across
                 all tokens. Updated in-place as merges are performed.
-            pair_locations: A dictionary mapping byte pairs to sets of indices indicating
+            pair_to_tokens: A dictionary mapping byte pairs to sets of indices indicating
                 which tokens in pre_tokens contain that pair. Updated in-place as merges
                 are performed.
             merge_time: The number of merge operations to perform.
@@ -163,38 +176,37 @@ def _merge(
             A list of merged byte pairs in the order they were merged. Each element is a
             tuple of two bytes representing a merged pair.
         Note:
-            - The function modifies pre_tokens, pair_counts, and pair_locations in-place.
+            - The function modifies pre_tokens, pair_counts, and pair_to_tokens in-place.
             - When multiple pairs have the same frequency, the lexicographically smallest
               pair is selected for merging.
-            - Pairs with zero count are removed from pair_counts and pair_locations.
+            - Pairs with zero count are removed from pair_counts and pair_to_tokens.
         """
     merges: list[tuple[bytes, bytes]] = []
-
     for i in range(merge_time):
         # 这样会先按 count 降序（因为 max 取最大值），count 相同时再按 pair 本身的字典序升序（tuple 默认字典序比较）选择最大的 pair。
         top_pair = max(pair_counts, key=lambda x: (pair_counts[x], x))
         merges.append(top_pair)
 
-        affected_tokens = pair_locations[top_pair].copy()
-        for j in affected_tokens:
-            token = pre_tokens[j]
-            if len(token) < 2:
+        affected_tokens = pair_to_tokens[top_pair].copy()
+        for affected_token in affected_tokens:
+            affected_token_bytes = pre_tokens[affected_token]
+            if len(affected_token_bytes) < 2:
                 continue
 
             # Decrement all pair counts in affected token
-            for pair in zip(token, token[1:]):
-                pair_counts[pair] -= 1
-                pair_locations[pair].discard(j)
+            for pair in zip(affected_token_bytes, affected_token_bytes[1:]):
+                pair_counts[pair] -= pre_token_counts[affected_token]
+                pair_to_tokens[pair].discard(affected_token)
                 if 0 == pair_counts[pair]:
                     del pair_counts[pair]
-                    del pair_locations[pair]
-            token = _merge_pair(token, top_pair)
+                    del pair_to_tokens[pair]
+            affected_token_bytes = _merge_pair(affected_token_bytes, top_pair)
             # Increment all pair counts in affected token
-            for pair in zip(token, token[1:]):
-                pair_counts[pair] += 1
-                pair_locations[pair].add(j)
-
-            pre_tokens[j] = token
+            for pair in zip(affected_token_bytes, affected_token_bytes[1:]):
+                pair_counts[pair] += pre_token_counts[affected_token]
+                pair_to_tokens[pair].add(affected_token)
+            pre_tokens[affected_token] = affected_token_bytes
+            
     return merges
 
 
@@ -251,21 +263,15 @@ def _process_chunk(
     start: int,
     end: int,
     special_tokens: list[str]
-) -> list[list[bytes]]:
+) -> defaultdict[bytes, int]:
     """
-    Read a byte range of a UTF-8 text file, remove occurrences of specified special
-    tokens, apply a GPT‑2 style pre-tokenization regex, and convert each resulting
-    token into a list of its constituent raw bytes.
+    Process a chunk of the input file for BPE training. 
     Processing steps:
-    1. Seek to byte offset `start` and read exactly `end - start` bytes.
-    2. Decode the bytes as UTF-8 (silently ignoring decode errors).
-    3. Split the decoded text on any of the provided `special_tokens` (they are
-       removed and not included in output).
-    4. For each remaining text fragment, apply the global regex pattern `GPT2_PAT`
-       (must be defined elsewhere) to obtain string tokens.
-    5. For every matched token, encode it to UTF-8 bytes, then expand it into a
-       list of single-byte `bytes` objects (one per byte), yielding a "pre-token"
-       representation suitable for byte-pair frequency counting.
+    1. Read the specified byte range from the input file.
+    2. Decode the bytes to a UTF-8 string, ignoring decode errors.
+    3. Remove any occurrences of the specified special tokens.
+    4. Pre-tokenize the cleaned string using the GPT-2 BPE regex pattern.
+    5. Count the occurrences of each pre-token byte sequence.
     Parameters:
         input_path (str):
             Path to the input file to read.
@@ -278,11 +284,9 @@ def _process_chunk(
             regex tokenization. Each is treated as a plain sequence (no regex
             metacharacters, they are escaped).
     Returns:
-        list[list[bytes]]:
-            A list of pre-tokens. Each pre-token is a list where every element
-            is a single-byte `bytes` object representing one byte from the
-            original UTF-8 encoding of the matched token. Order preserves the
-            original token sequence within the processed chunk.
+        defaultdict[bytes, int]:
+            A mapping from pre-token byte sequences to their occurrence counts
+            within the processed chunk.
     Notes:
         - Decode errors are ignored, which may drop malformed byte sequences.
         - Special tokens are removed entirely (not left as placeholders).
@@ -300,8 +304,8 @@ def _process_chunk(
                        for special_token in special_tokens)
     chunks_without_spe_token = re.split(pattern, chunk)
 
-    # 2. Pre-tokenize and count byte pair frequencies
-    pre_tokens: list[list[bytes]] = []
+    # 2. Pre-tokenize
+    pre_token_counts: defaultdict[bytes, int] = defaultdict(int)
     pattern = re.compile(GPT2_PAT)
     for c in chunks_without_spe_token:
         if not c.strip():
@@ -309,5 +313,5 @@ def _process_chunk(
         tokens = [match.group(0).encode("utf-8")
                   for match in pattern.finditer(c)]
         for token in tokens:
-            pre_tokens.append([bytes([b]) for b in token])
-    return pre_tokens
+            pre_token_counts[token] += 1
+    return pre_token_counts
