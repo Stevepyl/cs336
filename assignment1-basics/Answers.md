@@ -6,7 +6,7 @@
 (2) The string representation `str.__repr()__` shows the code needed to create the string and tell the interpreter its not bare characters, but the string literal is what a human wanna read it, like 'abc' and ''abc''.
 (3)`chr(0)` can't be printed, but if inserted into a string, it will be string literal `\x00`
 
-### 1.1 Problem (unicode2): Unicode Encodings
+### 1.2 Problem (unicode2): Unicode Encodings
 (1) Because using UTF-16/UTF-32 need much more space than UTF-8, especially for ASCII characters. And UTF-16/32 introduce more zero bytes than UTF-8, which may introduce less robustness
 (2) In UTF-8, there are four byte-classes:
     - 0xxxxxxx -> 1-byte char
@@ -61,5 +61,8 @@ def decode_utf8_bytes_to_str_wrong(bytestring: bytes):
 ```
 (3) b"\xe3\x82", because in UTF-8, 2-byte characters must begin with 110xxxxx, and a byte seq starting with 0xe3 is 3-byte UTF-8 character
     
+### 1.3 Problem (train_bpe_tinystories) BPE Training on TinyStories
+(1)On Apple M1 Pro with 8 processes, it takes 150.69 seconds (140.95 seconds with 16 processes). The longest token is `'Ġaccomplishment'`. Considering of usage of `bytes_to_unicode`, it's b' accomplishment' actually
+(2) The part of find the token pair which having the most occurency frequencies in the merging process takes the most time.
 
 
