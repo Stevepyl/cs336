@@ -6,6 +6,8 @@ from typing import BinaryIO
 from multiprocessing import get_context
 from collections import defaultdict
 
+import bpe_cpp
+
 GPT2_PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}++| ?\p{N}++| ?[^\s\p{L}\p{N}]++|\s++$|\s+(?!\S)|\s"""
 
 
@@ -62,18 +64,45 @@ def train_bpe(
         pre_tokens[token] = list(bytes([b]) for b in token)
         
     pair_to_tokens, pair_counts = _get_pair_count(global_token_counts, pre_tokens)
-        
-    merge_start_time = time.perf_counter()
-    merges = _merge(pre_tokens, global_token_counts, pair_counts, pair_to_tokens, merge_time)
-    merge_end_time = time.perf_counter()
-    print(f"\nTime using of merges: {merge_end_time - merge_start_time:.2f}")
+    
+    latin1_pre_tokens = {
+        token.decode("latin-1"): [b.decode("latin-1") for b in token_bytes]
+        for token, token_bytes in pre_tokens.items()
+    }
+    latin1_counts = {
+        token.decode("latin-1"): count
+        for token, count in global_token_counts.items()
+    }
+    latin1_pair_counts = {
+        (p0.decode("latin-1"), p1.decode("latin-1")): count
+        for (p0, p1), count in pair_counts.items()
+    }
+    latin1_pair_to_tokens = {
+        (p0.decode("latin-1"), p1.decode("latin-1")): {t.decode("latin-1") for t in tokens}
+        for (p0, p1), tokens in pair_to_tokens.items()
+    }
+    
+    # merge_start_time = time.perf_counter()
+    # merges = _merge(pre_tokens, global_token_counts, pair_counts, pair_to_tokens, merge_time)
+
+    # cpp_merges = bpe_cpp.merge_cpp(pre_tokens, global_token_counts, pair_counts, pair_to_tokens, merge_time)
+    cpp_merges_str = bpe_cpp.merge_cpp(
+        latin1_pre_tokens, latin1_counts, latin1_pair_counts, latin1_pair_to_tokens, merge_time
+    )
+    cpp_merges = [
+        (t0.encode("latin-1"), t1.encode("latin-1"))
+        for t0, t1 in cpp_merges_str
+    ]
+    # merge_end_time = time.perf_counter()
+    # print(f"merge_time is {merge_time}")
+    # print(f"\nTime using of merges: {merge_end_time - merge_start_time:.2f}")
 
     # 4. compute vocabs
     idx = len(vocab)
-    for (t0, t1) in merges:
+    for (t0, t1) in cpp_merges:
         vocab[idx] = t0 + t1
         idx += 1
-    return (vocab, merges)
+    return (vocab, cpp_merges)
 
 
 def _init_vocab(special_tokens: list[str]) -> dict[int, bytes]:
@@ -185,6 +214,7 @@ def _merge(
     for i in range(merge_time):
         # 这样会先按 count 降序（因为 max 取最大值），count 相同时再按 pair 本身的字典序升序（tuple 默认字典序比较）选择最大的 pair。
         top_pair = max(pair_counts, key=lambda x: (pair_counts[x], x))
+        print(f"merging :{top_pair}")
         merges.append(top_pair)
 
         affected_tokens = pair_to_tokens[top_pair].copy()
@@ -206,7 +236,6 @@ def _merge(
                 pair_counts[pair] += pre_token_counts[affected_token]
                 pair_to_tokens[pair].add(affected_token)
             pre_tokens[affected_token] = affected_token_bytes
-            
     return merges
 
 
