@@ -3,6 +3,8 @@
 # 如果运行脚本时提供了第 1 个参数，就把它赋给 train_mode；否则使用默认值 "full"。
 train_mode="${1:-full}"
 comments="${2:-}"
+export OMP_NUM_THREADS=4
+export OMP_SCHEDULE="dynamic,2000"
 
 case "$train_mode" in 
     test)

@@ -1,9 +1,12 @@
+#include <omp.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
 
+#include <chrono>
 #include <iostream>
+#include <new>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -14,10 +17,23 @@ namespace py = pybind11;
 using pair = std::pair<uint32_t, uint32_t>;
 using string_pair = std::pair<std::string, std::string>;
 using py_byte_pair = std::pair<py::bytes, py::bytes>;
+using Clock = std::chrono::steady_clock;
+
+#if defined(__cpp_lib_hardware_interference_size)
+static constexpr std::size_t CACHE_LINE = std::hardware_constructive_interference_size;
+#else
+static constexpr std::size_t CACHE_LINE = 128;	// Apple Silicon, Modify this on your own
+#endif
+
+struct LocalTop {
+	int top_count = -1;
+	string_pair top_pair;
+	char padding[CACHE_LINE];
+};
 
 // Cpp 的标准库中并没有提供 std::pair<int, int>
 // 的哈希函数，所以需要我们自己实现 从而用在 unordered_map
-// 中作为哈希表的哈希 
+// 中作为哈希表的哈希
 // From Boost
 struct pair_hash {
 	template <class T1, class T2>
@@ -29,18 +45,9 @@ struct pair_hash {
 	}
 };
 
-// std::vector<pair> _merge(
-// 	std::unordered_map<int, std::vector<int>>& pre_tokens,
-// 	std::unordered_map<int, std::vector<int>>& pre_token_counts,
-// 	std::unordered_map<pair, int, pair_hash>& pair_counts,
-// 	std::unordered_map<pair, std::unordered_set<int>, pair_hash>&
-// pair_to_tokens, 	int merge_time, ) {
-
-// }
-
 void _merge_pair(std::vector<std::string>& tokens, const string_pair& pair) {
 	std::vector<std::string> new_token;
-    new_token.reserve(tokens.size());
+	new_token.reserve(tokens.size());
 	int i = 0;
 
 	while (i < tokens.size()) {
@@ -62,19 +69,6 @@ std::vector<py_byte_pair> merge_cpp(
 	py::dict pair_to_tokens_py,
 	int merge_time
 ) {
-	// for (auto& [pair, count] : pair_counts) {
-	//     std::cout << "Cpp pair count: " << pair.first << ", " << pair.second << " -> " << count
-	//     << std::endl;
-	// }
-
-	// for (auto& [token, bytes] : pre_tokens) {
-	//     std::cout << "Cpp pre_token: " << token << " -> ";
-	//     for (const auto& byte : bytes) {
-	//         std::cout << byte << " ";
-	//     }
-	//     std::cout << std::endl;
-	// }
-
 	std::unordered_map<std::string, std::vector<std::string>> pre_tokens;
 	std::unordered_map<std::string, int> pre_token_counts;
 	std::unordered_map<string_pair, int, pair_hash> pair_counts;
@@ -126,24 +120,71 @@ std::vector<py_byte_pair> merge_cpp(
 		}
 		pair_to_tokens[key] = std::move(val_set);
 	}
+
 	std::vector<string_pair> merges;
+	Clock::duration get_top_time = Clock::duration::zero();
+
 	for (int i = 0; i < merge_time; i++) {
 		// Finding top pair
-		string_pair top_pair;
-		int top_count = -1;
-		for (const auto& [pair, count] : pair_counts) {
-			if (count > top_count) {
-				top_count = count;
-				top_pair = pair;
-			} else if (count == top_count && pair > top_pair) {
-				top_count = count;
-				top_pair = pair;
+		LocalTop top;
+
+		// C++的unordered_map把不同的 hashcode 相同的key对应的pair都放在同一个桶(bucket)里，
+		// 每个非空桶指向一个链表，用来存储这些hashcode相同的pair
+		// unordered_map有一个bucket
+		// api，它可以使得我们实现类似于vector的方式遍历，从而实现并行求max
+
+		Clock::time_point start_time = Clock::now();
+		size_t num_buckets = pair_counts.bucket_count();
+		std::vector<LocalTop> local_tops(omp_get_max_threads());
+
+		// 子线程
+#pragma omp parallel
+		{
+			// 每一个线程中的top_pair
+			LocalTop local_top;
+
+#pragma omp for schedule(runtime)
+			for (int i = 0; i < num_buckets; ++i) {
+				// 局部迭代器 (Local Iterators)：
+				//    标准库提供了重载版本的 begin() 和 end() 方法，接受一个桶的索引作为参数：
+				//    pair_counts.begin(bucket_idx)：返回指向第 bucket_idx
+				//    个桶中第一个元素的局部迭代器。
+				//	  pair_counts.end(bucket_idx)：返回指向第 bucket_idx个桶末尾的局部迭代器
+				for (auto it = pair_counts.begin(i); it != pair_counts.end(i); ++it) {
+					const auto& pair = it->first;
+					const auto& count = it->second;
+					if (count > local_top.top_count) {
+						local_top.top_count = count;
+						local_top.top_pair = pair;
+					} else if (count == local_top.top_count && pair > local_top.top_pair) {
+						local_top.top_count = count;
+						local_top.top_pair = pair;
+					}
+				}
+			}
+			int thread_id = omp_get_thread_num();
+			local_tops[thread_id] = local_top;
+		}
+		// 串行在每个线程的top_pair里求最top的
+		for (const auto& t : local_tops) {
+			if (-1 == t.top_count) {
+				continue;
+			} else {
+				if (t.top_count > top.top_count) {
+					top.top_count = t.top_count;
+					top.top_pair = t.top_pair;
+				} else if (t.top_count == top.top_count && t.top_pair > top.top_pair) {
+					top.top_count = t.top_count;
+					top.top_pair = t.top_pair;
+				}
 			}
 		}
 
-		merges.push_back(top_pair);
+		Clock::time_point end_time = Clock::now();
+		get_top_time += (end_time - start_time);
+		merges.push_back(top.top_pair);
 
-		std::unordered_set<std::string> affected_tokens = pair_to_tokens[top_pair];
+		std::unordered_set<std::string> affected_tokens = pair_to_tokens[top.top_pair];
 		for (auto& affected_token : affected_tokens) {
 			std::vector<std::string>& affected_token_bytes = pre_tokens[affected_token];
 			const int affected_token_bytes_size = affected_token_bytes.size();
@@ -161,7 +202,7 @@ std::vector<py_byte_pair> merge_cpp(
 				}
 			}
 
-			_merge_pair(affected_token_bytes, top_pair);
+			_merge_pair(affected_token_bytes, top.top_pair);
 
 			// Increment all pair counts in affected token
 			// ATTENTION: affected_token_bytes size has changed after merge
@@ -180,7 +221,8 @@ std::vector<py_byte_pair> merge_cpp(
 	for (const auto& p : merges) {
 		result.emplace_back(py::bytes(p.first), py::bytes(p.second));
 	}
-
+	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(get_top_time);
+	std::cout << "Get top pair using: " << ms.count() << " milliseconds" << std::endl;
 	return result;
 }
 
