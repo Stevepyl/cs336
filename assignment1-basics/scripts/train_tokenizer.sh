@@ -2,6 +2,7 @@
 
 # 如果运行脚本时提供了第 1 个参数，就把它赋给 train_mode；否则使用默认值 "full"。
 train_mode="${1:-full}"
+comments="${2:-}"
 
 case "$train_mode" in 
     test)
@@ -26,4 +27,4 @@ uv run train/train_tokenizer.py \
   --output_dir 'model/my_tokenizer' \
   --vocab_size "$vocab_size" \
   --data_path "$data_path" \
-  > train_logs/train_tokenizer.log
+  > train_logs/train_tokenizer_${train_mode}_${comments}.log
