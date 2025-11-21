@@ -3,8 +3,11 @@
 # 如果运行脚本时提供了第 1 个参数，就把它赋给 train_mode；否则使用默认值 "full"。
 train_mode="${1:-full}"
 comments="${2:-}"
+
+# For linux
+# export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libgomp.so.1
 export OMP_NUM_THREADS=4
-export OMP_SCHEDULE="dynamic,2000"
+export OMP_SCHEDULE="dynamic,5000"
 
 case "$train_mode" in 
     test)

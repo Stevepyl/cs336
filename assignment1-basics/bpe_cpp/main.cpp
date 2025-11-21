@@ -22,9 +22,18 @@ using Clock = std::chrono::steady_clock;
 #if defined(__cpp_lib_hardware_interference_size)
 static constexpr std::size_t CACHE_LINE = std::hardware_constructive_interference_size;
 #else
-static constexpr std::size_t CACHE_LINE = 128;	// Apple Silicon, Modify this on your own
+static constexpr std::size_t CACHE_LINE = 128;	// Apple Silicon, Modify this to 64 if on linux
 #endif
 
+// Avoid "False Sharing"
+// std::hardware_constructive_interference_size
+// 表示两个对象为了避免相互干扰（即伪共享）所需的最小内存间隔
+// 保证不同线程操作的 LocalTop 实例位于不同的物理缓存行中，互不干扰。
+// Also can use:
+// struct alignas(CACHE_LINE) LocalTop {
+// 	int top_count = -1;
+// 	string_pair top_pair;
+// };
 struct LocalTop {
 	int top_count = -1;
 	string_pair top_pair;
@@ -74,13 +83,14 @@ std::vector<py_byte_pair> merge_cpp(
 	std::unordered_map<string_pair, int, pair_hash> pair_counts;
 	std::unordered_map<string_pair, std::unordered_set<std::string>, pair_hash> pair_to_tokens;
 
-    auto convert_start = Clock::now();
+	auto convert_start = Clock::now();
 
 	pre_tokens.reserve(pre_tokens_py.size());
 	pre_token_counts.reserve(pre_token_counts_py.size());
 	pair_counts.reserve(pair_counts_py.size());
 	pair_to_tokens.reserve(pair_to_tokens_py.size());
 
+    // Convert parameters to cpp unordered_map
 	// Convert pre_tokens
 	for (auto item : pre_tokens_py) {
 		std::string key = item.first.cast<std::string>();
@@ -125,11 +135,12 @@ std::vector<py_byte_pair> merge_cpp(
 	auto convert_end = Clock::now();
 	auto convert_time =
 		std::chrono::duration_cast<std::chrono::milliseconds>(convert_end - convert_start);
-	std::cout << "Convert using: " <<  convert_time.count() << " ms" << std::endl; 
+	std::cout << "Convert using: " << convert_time.count() << " ms" << std::endl;
+
 
 	std::vector<string_pair> merges;
 	Clock::duration get_top_time = Clock::duration::zero();
-    Clock::duration update_time = Clock::duration::zero();
+	Clock::duration update_time = Clock::duration::zero();
 
 	for (int i = 0; i < merge_time; i++) {
 		// Finding top pair
@@ -144,7 +155,7 @@ std::vector<py_byte_pair> merge_cpp(
 		size_t num_buckets = pair_counts.bucket_count();
 		std::vector<LocalTop> local_tops;
 
-		// 子线程
+		// parallel start
 #pragma omp parallel
 		{
 #pragma omp single
@@ -196,8 +207,9 @@ std::vector<py_byte_pair> merge_cpp(
 		get_top_time += (end_time - start_time);
 		merges.push_back(top.top_pair);
 
-        auto update_start = Clock::now();
+		auto update_start = Clock::now();
 
+        // Update affected tokens
 		std::unordered_set<std::string> affected_tokens = pair_to_tokens[top.top_pair];
 		for (auto& affected_token : affected_tokens) {
 			std::vector<std::string>& affected_token_bytes = pre_tokens[affected_token];
@@ -229,17 +241,19 @@ std::vector<py_byte_pair> merge_cpp(
 			pre_tokens[affected_token] = affected_token_bytes;
 		}
 
-        auto update_end = Clock::now();
-        update_time += (update_end - update_start);
+		auto update_end = Clock::now();
+		update_time += (update_end - update_start);
 	}
 
+    // Convert result from std::unordered_map into py::bytes
 	std::vector<py_byte_pair> result;
 	result.reserve(merges.size());
 	for (const auto& p : merges) {
 		result.emplace_back(py::bytes(p.first), py::bytes(p.second));
 	}
-	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(get_top_time);
-	std::cout << "Get top pair using: " << ms.count() << " ms" << std::endl;
+
+	auto get_top_ms = std::chrono::duration_cast<std::chrono::milliseconds>(get_top_time);
+	std::cout << "Get top pair using: " << get_top_ms.count() << " ms" << std::endl;
 
 	auto update_ms = std::chrono::duration_cast<std::chrono::milliseconds>(update_time);
     std::cout << "Update affected pairs using: " << update_ms.count() << "ms" << std::endl;

@@ -100,6 +100,9 @@ def bytes_to_unicode():
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     """
     # bs = list(range(33, 127)) + list(range(161, 173)) + list(range(174, 256))
+    # 这段代码实现了一个将原始字节（0-255）映射到 Unicode 字符的查找表。这是 GPT-2 和 GPT-3 等模型中使用的 
+    # Byte-Level BPE（字节级字节对编码）的核心预处理步骤。其目的是为了能够处理任意的二进制数据，
+    # 同时避免在处理控制字符或无效 UTF-8 序列时出现乱码或错误。
     bs = (
         list(range(ord("!"), ord("~") + 1)) +
         list(range(ord("¡"), ord("¬") + 1)) +

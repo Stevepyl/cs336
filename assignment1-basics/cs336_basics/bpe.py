@@ -40,7 +40,7 @@ def train_bpe(
     # 1. Init vocab and merges
     vocab: dict[int, bytes] = _init_vocab(special_tokens)
     merges: list[tuple[bytes, bytes]] = []
-    cpp_merges: list[tuple[bytes, bytes]] = []
+    cpp_merges: list[tuple[bytes, bytes]] = [] # merges from cpp version merge function
     merge_time = vocab_size - len(vocab)
     # Attention: Here the merge_time is NOT `vocab_size - 256`, we also need to consider special_tokens,
     # cause they're also part of vocab, so using vocab_size - len(vocab)
@@ -198,9 +198,12 @@ def _merge(
         print(f"merging :{top_pair}")
         merges.append(top_pair)
 
+        # Update affected tokens
+        # For example, the top-pair is ('h', 'e'), then we need to update the bytes list of "The", "They", "she"...
         affected_tokens = pair_to_tokens[top_pair].copy()
         for affected_token in affected_tokens:
             affected_token_bytes = pre_tokens[affected_token]
+            # Single bytes needn't to update
             if len(affected_token_bytes) < 2:
                 continue
 
@@ -309,12 +312,13 @@ def _process_chunk(
     with open(input_path, "rb") as f:
         f.seek(start)
         chunk = f.read(end - start).decode("utf-8", errors="ignore")
-    # 1. Remove special tokens
+    # 1. Remove special tokens in chunk, split the document into pieces, splitter is special token
     pattern = "|".join(re.escape(special_token)
                        for special_token in special_tokens)
     chunks_without_spe_token = re.split(pattern, chunk)
 
     # 2. Pre-tokenize
+    # using the pattern to split the chunks into 'pre-tokens' like "The", "  ", "hello"...
     pre_token_counts: defaultdict[bytes, int] = defaultdict(int)
     pattern = re.compile(GPT2_PAT)
     for c in chunks_without_spe_token:
