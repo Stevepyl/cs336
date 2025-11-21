@@ -47,6 +47,9 @@ def train_bpe(
 
     global_token_counts: defaultdict[bytes, int] = defaultdict(int)
     # 2. Pre-tokenization
+    
+    pre_tokenization_start_time = time.perf_counter()
+    
     with open(input_path, "rb") as f:
         boundaries = _find_chunk_boundaries(
             f, num_processes, "<|endoftext|>".encode("utf-8"))
@@ -59,6 +62,9 @@ def train_bpe(
             for token, count in chunk_counts.items():
                 global_token_counts[token] += count
 
+    pre_tokenization_end_time = time.perf_counter()
+    print(f"Pre-Tokenization using: {(pre_tokenization_end_time - pre_tokenization_start_time):.2f}s")
+
     # 3. Compute merges
     pre_tokens: dict[bytes, list[bytes]] = {}
     for token in global_token_counts:
@@ -70,7 +76,7 @@ def train_bpe(
     # merges = _merge(pre_tokens, global_token_counts, pair_counts, pair_to_tokens, merge_time)
     cpp_merges = bpe_cpp.merge_cpp(pre_tokens, global_token_counts, pair_counts, pair_to_tokens, merge_time)
     merge_end_time = time.perf_counter()
-    print(f"\nTime using of merges: {merge_end_time - merge_start_time:.2f}")
+    print(f"\nTime using of merges: {merge_end_time - merge_start_time:.2f}s")
 
     # 4. compute vocabs
     idx = len(vocab)

@@ -43,7 +43,7 @@ def main():
     vocab, merges = train_bpe(data_path, vocab_size, special_tokens, 8)
     end_time = time.perf_counter()
     save_tokenizer(vocab, merges, output_dir)
-    print(f"total train time: {end_time - start_time:.2f} seconds")
+    print(f"total train time: {end_time - start_time:.2f} s")
     
     # For validate correctness of byte_to_unicode
     # byte_encoder = bytes_to_unicode()
