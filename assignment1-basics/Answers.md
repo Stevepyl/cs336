@@ -65,4 +65,44 @@ def decode_utf8_bytes_to_str_wrong(bytestring: bytes):
 (1)On Apple M1 Pro with 8 processes, it takes 150.69 seconds (140.95 seconds with 16 processes). The longest token is `'Ġaccomplishment'`. Considering of usage of `bytes_to_unicode`, it's b' accomplishment' actually
 (2) The part of find the token pair which having the most occurency frequencies in the merging process takes the most time.
 
+### 1.4 Problem (train_bpe_owt) BPE Training on OpenWebText
+(1) The longest token is "----------------------------------------------------------------". It makes sense because Users frequently use long strings of dashes to separate sections, create horizontal rules, or format ASCII tables.
+(2) 
+```
+TinyStories vocab size: 10000
+OpenWebText vocab size: 32000
+TinyStories avg token length: 5.79
+OpenWebText avg token length: 6.34
+Character distribution:
+TinyStories: {'special': 145, 'alphabetic': 57748, 'numeric': 20}
+OpenWebText: {'special': 1334, 'alphabetic': 199755, 'numeric': 1698}
+Common tokens: 7319
+TinyStories unique tokens: 2681
+OpenWebText unique tokens: 24681
+Jaccard Similarity: 0.2110
+
+Longest TinyStories tokens: 
+Ġaccomplishment
+Ġdisappointment
+Ġresponsibility
+Ġuncomfortable
+Ġcompassionate
+
+Longest OpenWebText tokens: 
+ÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤÃĥÃĤ
+----------------------------------------------------------------
+âĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶâĢĶ
+--------------------------------
+________________________________
+
+Sample unique TinyStories tokens:
+['obody', 'washer', 'Ġwarmed', 'Ġtidied', 'Ġbluebird', 'Ġsneaky', 'ĠPuffy', 'ĠFaye', 'Pip', 'bbers']
+
+Sample unique OpenWebText tokens:
+['ĠUS', 'gets', 'rath', 'Ġthermal', 'gerald', 'nine', 'Ġviolation', 'Ġweakened', 'rifice', 'Copyright']
+```
+
+
+
+
 
