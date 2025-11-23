@@ -1,13 +1,10 @@
 from functools import lru_cache
 from typing import Iterable
-from idna import encode
-from networkx import multi_source_dijkstra_path_length
 import regex as re
 import json
-import os
 
 GPT2_PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}++| ?\p{N}++| ?[^\s\p{L}\p{N}]++|\s++$|\s+(?!\S)|\s"""
-
+GPT2_REGEX = re.compile(GPT2_PAT)
 
 class BPETokenizer:
     def __init__(
@@ -72,22 +69,23 @@ class BPETokenizer:
         text: str
     ) -> list[int]:
         token_ids: list[int] = []
-        pre_tokens: list[bytes] = self._process_chunk(text, self.special_tokens)
         # If text is "Hello world! It's 42."
         # pre-tokens is [b'Hello', b' world', b'!', b' It', b"'s", b' 42', b'.']
-        for token in pre_tokens:
+        for token in self._process_chunk(text, self.special_tokens):
             # print(f"Enter encoding loop, now token is {token}...")
             if self.special_tokens is not None and token.decode("utf-8") in self.special_tokens:
                 token_ids.append(self.vocab_inverse[token])
                 continue
             
-            token_bytes: list[bytes] = list(bytes([b]) for b in token)
+            token_bytes: list[bytes] = [token[i:i+1]
+                                        for i in range(len(token))]
             while len(token_bytes) >= 2:
                 pairs = list(zip(token_bytes, token_bytes[1:]))
                 # print(f"Pairs of {token} now is {pairs}")
                 pair_to_merge = None
                 min_rank = float("inf")
-                for pair in pairs:
+                for i in range(len(token_bytes) - 1):
+                    pair = (token_bytes[i], token_bytes[i+1])
                     rank = self.merges.get(pair, float("inf"))
                     if rank < min_rank:
                         min_rank = rank
@@ -178,9 +176,8 @@ class BPETokenizer:
     def _process_chunk(
         text: str,
         special_tokens: list[str] | None
-    ) -> list[bytes] :
+    ) -> Iterable[bytes]:
         pre_tokens: list[bytes] = []
-        pattern = re.compile(GPT2_PAT)
         if special_tokens is not None:
             sorted_special_tokens = sorted(
                 special_tokens, key=len, reverse=True)
@@ -189,12 +186,11 @@ class BPETokenizer:
             chunks = re.split(spe_pattern, text) if spe_pattern else [text]
             for c in chunks:
                 if c in special_tokens:
-                    pre_tokens.extend([c.encode("utf-8")])
+                    yield c.encode("utf-8")
                 else:
-                    pre_tokens.extend([match.group(0).encode("utf-8")
-                              for match in pattern.finditer(c)])
+                    for match in GPT2_REGEX.finditer(c):
+                        yield match.group(0).encode("utf-8")
         else:
-            pre_tokens.extend([match.group(0).encode("utf-8")
-                              for match in pattern.finditer(text)])
-        return pre_tokens  
+            for match in GPT2_REGEX.finditer(text):
+                yield match.group(0).encode("utf-8")
         

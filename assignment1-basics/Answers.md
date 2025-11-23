@@ -1,12 +1,12 @@
 # Answers of the Questions in Assignment 1
 
-## 1.Byte-Pair Encoding (BPE) Tokenizer
-### 1.1 Problem (unicode1): Understanding Unicode
+## 2.Byte-Pair Encoding (BPE) Tokenizer
+### 2.1 Problem (unicode1): Understanding Unicode
 (1) `chr(0)` returns `'\x00'`, which represents the character U+0000, which is the NULL character (also called "NUL").
 (2) The string representation `str.__repr()__` shows the code needed to create the string and tell the interpreter its not bare characters, but the string literal is what a human wanna read it, like 'abc' and ''abc''.
 (3)`chr(0)` can't be printed, but if inserted into a string, it will be string literal `\x00`
 
-### 1.2 Problem (unicode2): Unicode Encodings
+### 2.2 Problem (unicode2): Unicode Encodings
 (1) Because using UTF-16/UTF-32 need much more space than UTF-8, especially for ASCII characters. And UTF-16/32 introduce more zero bytes than UTF-8, which may introduce less robustness
 (2) In UTF-8, there are four byte-classes:
     - 0xxxxxxx -> 1-byte char
@@ -61,11 +61,11 @@ def decode_utf8_bytes_to_str_wrong(bytestring: bytes):
 ```
 (3) b"\xe3\x82", because in UTF-8, 2-byte characters must begin with 110xxxxx, and a byte seq starting with 0xe3 is 3-byte UTF-8 character
     
-### 1.3 Problem (train_bpe_tinystories) BPE Training on TinyStories
+### 2.3 Problem (train_bpe_tinystories) BPE Training on TinyStories
 (1)On Apple M1 Pro with 8 processes, it takes 150.69 seconds (140.95 seconds with 16 processes). The longest token is `'Ġaccomplishment'`. Considering of usage of `bytes_to_unicode`, it's b' accomplishment' actually
 (2) The part of find the token pair which having the most occurency frequencies in the merging process takes the most time.
 
-### 1.4 Problem (train_bpe_owt) BPE Training on OpenWebText
+### 2.4 Problem (train_bpe_owt) BPE Training on OpenWebText
 (1) The longest token is "----------------------------------------------------------------". It makes sense because Users frequently use long strings of dashes to separate sections, create horizontal rules, or format ASCII tables.
 (2) 
 ```
@@ -101,7 +101,16 @@ Sample unique TinyStories tokens:
 Sample unique OpenWebText tokens:
 ['ĠUS', 'gets', 'rath', 'Ġthermal', 'gerald', 'nine', 'Ġviolation', 'Ġweakened', 'rifice', 'Copyright']
 ```
+### 2.7 Experiments
+(1) The TinyStories tokenizer(10K vocab) achieves 4.0445 byte/token compression ratio, The OpenWebText tokenizer
+(32K vocab) achieves 4.5125 byte/token compression ratio. It shows that the larger vocabulary is, the better compression it achieves
 
+(2) Using tokenizer trained on TinyStories to encode OpenWebText achieves 3.4111 byte/token compression ratio. Compared with 4.5125 byte/token
+achieved by native OpenWebText tokenizer, it shows nearly 25% degradation.
+
+(3) Nearly 1MBps,229H
+
+(4)uint16 is appropriate because it can represent values up to 65,535, which easily accommodates our vocabulary sizes (10K and 32K tokens), while being twice as memory-efficient as uint32 (1.9 MB vs 3.8 MB per 1M tokens) and avoiding the 255 value limit of uint8.
 
 
 
