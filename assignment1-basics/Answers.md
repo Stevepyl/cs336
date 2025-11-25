@@ -108,7 +108,7 @@ Sample unique OpenWebText tokens:
 (2) Using tokenizer trained on TinyStories to encode OpenWebText achieves 3.4111 byte/token compression ratio. Compared with 4.5125 byte/token
 achieved by native OpenWebText tokenizer, it shows nearly 25% degradation.
 
-(3) Nearly 1MBps,229H
+(3) For single process and treating the document as a whole text chunk, it can achieve 1.32MB/s
 
 (4)uint16 is appropriate because it can represent values up to 65,535, which easily accommodates our vocabulary sizes (10K and 32K tokens), while being twice as memory-efficient as uint32 (1.9 MB vs 3.8 MB per 1M tokens) and avoiding the 255 value limit of uint8.
 

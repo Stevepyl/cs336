@@ -20,10 +20,10 @@ def main():
     )
     owt_text = ""
     ts_text = ""
-    with open("./data/owt_test.txt", 'r', encoding="utf-8") as f:
+    with open("./data/owt_valid.txt", 'r', encoding="utf-8") as f:
         owt_text = f.read()
         
-    with open("./data/TinyStoriesV2-GPT4-valid.txt", 'r', encoding="utf-8") as f:
+    with open("./data/ts_test.txt", 'r', encoding="utf-8") as f:
         ts_text = f.read()
         
     owt_text_bytes = owt_text.encode("utf-8")
@@ -42,7 +42,6 @@ def main():
     print(f"Cross compression ratio (OWT text with TinyStories tokenizer): {cross_compression_ratio:.4f}")
     end_time = time.perf_counter()
     print(f"Total experiment time: {end_time - start_time:.8f} seconds")
-    
     
 
 if __name__ == "__main__":
