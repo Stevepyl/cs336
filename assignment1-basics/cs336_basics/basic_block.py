@@ -5,7 +5,6 @@ from torch import Tensor
 from einops import einsum
 from jaxtyping import Int, Float
 
-
 class Linear(nn.Module):
     def __init__(
         self,
@@ -66,39 +65,3 @@ class Embedding(nn.Module):
 
     def _custom_init_weights(self):
         nn.init.trunc_normal_(self.weights, mean=0.0, std=1.0, a=-3.0, b=3.0)
-
-
-class RMSNorm(nn.Module):
-    def __init__(
-        self,
-        d_model: int,
-        eps: float = 1e-5,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None
-    ) -> None:
-        super().__init__()
-        self.d_model = d_model
-        self.eps = eps
-        factory_kwargs = {"device": device, "dtype": dtype}
-        self.weights = nn.Parameter(torch.empty(d_model, **factory_kwargs))
-        
-        
-    def forward(self, x: Float[Tensor, " ... d_model"]) -> torch.Tensor:
-        """Process an input tensor of shape (batch_size, sequence_length, d_model) 
-        and return a tensor of the same shape.
-
-        Args:
-            x (Float[Tensor, "... d_model"]): input tensor of shape (batch_size, sequence_length, d_model) 
-
-        Returns:
-            torch.Tensor: _description_
-        """
-        in_dtype = x.dtype
-        x = x.to(torch.float32)
-        result = x / self._rms(x) * self.weights
-        return result.to(in_dtype)
-    
-    def _rms(self, a: torch.Tensor):
-        # a is d_model dimension
-        return torch.sqrt(self.eps + a.pow(2).mean(dim=-1, keepdim=True))
-    

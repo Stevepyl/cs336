@@ -13,7 +13,9 @@ from cs336_basics import (
     BPETokenizer,
     Linear,
     Embedding,
-    RMSNorm
+    RMSNorm,
+    SiLUFFN,
+    SwiGLUFFN
 )
 
 def run_linear(
@@ -92,7 +94,13 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    swiglu = SwiGLUFFN(d_ff=d_ff, d_model=d_model)
+    swiglu.load_state_dict({
+        "w1.weights": w1_weight,
+        "w2.weights": w2_weight,
+        "w3.weights": w3_weight
+    })
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(

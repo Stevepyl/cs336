@@ -1,9 +1,13 @@
 from .bpe import train_bpe
 from .tokenizer import BPETokenizer
-from .model import (
+from .basic_block import (
     Linear,
-    Embedding,
-    RMSNorm
+    Embedding
+)
+from .pre_norm_block import (
+    RMSNorm,
+    SwiGLUFFN,
+    SiLUFFN
 )
 
 import importlib.metadata
