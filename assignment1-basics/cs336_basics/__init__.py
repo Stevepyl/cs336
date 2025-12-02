@@ -7,7 +7,8 @@ from .basic_block import (
 from .pre_norm_block import (
     RMSNorm,
     SwiGLUFFN,
-    SiLUFFN
+    SiLUFFN,
+    RotaryPositionalEmbedding
 )
 
 import importlib.metadata
