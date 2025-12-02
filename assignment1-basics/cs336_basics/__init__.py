@@ -8,7 +8,12 @@ from .pre_norm_block import (
     RMSNorm,
     SwiGLUFFN,
     SiLUFFN,
-    RotaryPositionalEmbedding
+    RotaryPositionalEmbedding,
+    scaled_dot_product_attention
+)
+from .utils import (
+    silu,
+    softmax
 )
 
 import importlib.metadata

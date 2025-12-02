@@ -1,17 +1,29 @@
 import math
-from turtle import forward
 import torch
 import torch.nn as nn
-from torch import Tensor, view_as_complex
-from einops import einsum, rearrange
-from jaxtyping import Float
+from torch import Tensor
+from einops import einsum
+from jaxtyping import Float, Bool
 
 from cs336_basics.basic_block import Linear
+from cs336_basics.utils import (
+    silu,
+    softmax
+)
 
-
-def silu(x: torch.Tensor) -> torch.Tensor:
-    return x * torch.sigmoid(x)
-
+def scaled_dot_product_attention(
+    queries: Float[Tensor, "batch_size ... seq_len d_k"],
+    key: Float[Tensor, "batch_size ... seq_len d_k"],
+    values: Float[Tensor, "batch_size ... seq_len d_v"],
+    mask: Bool[Tensor, "seq_len seq_len"] | None = None
+) -> Float[Tensor, "batch_size ... d_v"]:
+    d_k = queries.shape[-1]
+    score = einsum(queries, key, "... i d_k, ... j d_k -> ... i j") / math.sqrt(d_k)
+    if mask is not None:
+        score = score.masked_fill(mask == False, float('-inf'))
+    score = softmax(score, dim=-1)
+    attention: Float[Tensor, "batch_size, ..., d_v"] = torch.matmul(score, values)
+    return attention
 
 class RMSNorm(nn.Module):
     def __init__(
@@ -117,10 +129,10 @@ class RotaryPositionalEmbedding(nn.Module):
     ) -> torch.Tensor:
         x = x.view(*x.shape[:-1], -1, 2)
         x = torch.view_as_complex(x)
-        freqs_cis = self.angles[token_positions] # type: ignore
-        if freqs_cis.ndim == 3:
-            freqs_cis = freqs_cis.unsqueeze(1)
-        x_rotated = x * freqs_cis 
+        if self.angles[token_positions].ndim == 3: #type: ignore
+            x_rotated = x * self.angles[token_positions].unsqueeze(1) # type: ignore
+        else:
+            x_rotated = x * self.angles[token_positions] #type: ignore
         x_real = torch.view_as_real(x_rotated).flatten(-2)
         return x_real
 
@@ -135,3 +147,4 @@ class RotaryPositionalEmbedding(nn.Module):
         # cis means 'c'os + 'is'in
         angles_cis = torch.polar(torch.ones_like(angles), angles)
         return angles_cis
+
