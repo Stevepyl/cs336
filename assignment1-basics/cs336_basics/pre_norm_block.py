@@ -1,13 +1,10 @@
 import math
-import re
-from turtle import forward
-from numpy import dtype
-from sympy import Line
 import torch
 import torch.nn as nn
-from torch import Tensor, mul
+from torch import Tensor
 from einops import einsum, rearrange
-from jaxtyping import Float, Bool
+from jaxtyping import Float, Bool, Int
+from functools import lru_cache
 
 from cs336_basics.basic_block import Linear
 from cs336_basics.utils import (
@@ -119,25 +116,23 @@ class RotaryPositionalEmbedding(nn.Module):
         theta: float,
         d_k: int,
         max_seq_len: int,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None
     ):
         super().__init__()
         self.theta = theta
         self.d_k = d_k
         self.max_seq_len = max_seq_len
-        self.device = device
-        self.dtype = dtype
+        angles = self._compute_rotate_angles()
         self.register_buffer(
             "angles", self._compute_rotate_angles(), persistent=False)
 
     def forward(
         self,
-        x: Float[Tensor, " ... sequence_length d_k"],
+        x: Float[Tensor, " batch_size sequence_length d_k"],
         token_positions: Float[Tensor, " ... sequence_length"]
     ) -> torch.Tensor:
         x = x.view(*x.shape[:-1], -1, 2)
         x = torch.view_as_complex(x)
+        self.angles.to(dtype=x.dtype)
         if self.angles[token_positions].ndim == 3: #type: ignore
             x_rotated = x * self.angles[token_positions].unsqueeze(1) # type: ignore
         else:
@@ -148,10 +143,8 @@ class RotaryPositionalEmbedding(nn.Module):
     def _compute_rotate_angles(self):
         # holds the speed at which each dimension pair rotates.
         # shape: (self.d_k / 2, )
-        freqs = 1.0 / (self.theta ** (torch.arange(0, self.d_k, 2,
-                       device=self.device, dtype=self.dtype).float() / self.d_k))
-        positions = torch.arange(end=self.max_seq_len,
-                                 device=self.device, dtype=self.dtype)
+        freqs = 1.0 / (self.theta ** (torch.arange(0, self.d_k, 2, dtype=torch.float32).float() / self.d_k))
+        positions = torch.arange(end=self.max_seq_len, dtype=torch.float32)
         angles = torch.outer(positions, freqs)
         # Creates a complex tensor where real part is cos and imag part is sin
         # Equal to torch.complex(torch.cos(freqs), torch.sin(freqs))
@@ -159,25 +152,40 @@ class RotaryPositionalEmbedding(nn.Module):
         angles_cis = torch.polar(torch.ones_like(angles), angles)
         return angles_cis
 
+# Not method of RoPE
+@lru_cache(10)
+def get_rope(theta: float, d_k: int, max_seq_len: int):
+    return RotaryPositionalEmbedding(theta, d_k, max_seq_len)
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(
         self,
         d_model: int,
         num_heads: int,
+        theta: float | None = None,
+        max_seq_len: int | None = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ) -> None:
         # Following Attention is All You Need, set d_k = d_v = d_model/h
         super().__init__()
         self.d_model = d_model
         self.num_heads = num_heads
         self.d_k = self.d_v = d_model // num_heads
-        self.q_proj = Linear(d_model, d_model)
-        self.k_proj = Linear(d_model, d_model)
-        self.v_proj = Linear(d_model, d_model)
+        factory_kwargs = {"device": device, "dtype": dtype}
+        self.q_proj = Linear(d_model, d_model, **factory_kwargs)
+        self.k_proj = Linear(d_model, d_model, **factory_kwargs)
+        self.v_proj = Linear(d_model, d_model, **factory_kwargs)
         # o_proj is actually d_model in and h * d_v out
-        self.o_proj = Linear(d_model, d_model)
+        self.o_proj = Linear(d_model, d_model, **factory_kwargs)
+        if (theta is not None) and (max_seq_len is not None):
+            self.rope = get_rope(theta, self.d_k, max_seq_len)
 
-    def forward(self, x: Float[Tensor, "batch_size seq_len d_model"]):
+    def forward(
+        self, 
+        x: Float[Tensor, "batch_size seq_len d_model"],
+        token_positions: Int[Tensor, " ... sequence_length"] | None = None,
+    ) -> torch.Tensor: # Same shape of x
         seq_len = x.shape[-2]
         mask = torch.ones(seq_len, seq_len, device=x.device, dtype=x.dtype).tril()
         q = self.q_proj(x)
@@ -186,11 +194,17 @@ class MultiHeadSelfAttention(nn.Module):
         
         # For every Batch and for every Head, independently calculate the interaction between Sequence tokens.
         # (batch_size, seq_len, d_model=num_heads*d_k) -> (batch_size, num_heads, seq_len, d_k)
-        q = rearrange(q, "b s (h d) ->  b h s d", h=self.num_heads)
-        k = rearrange(k, "b s (h d) ->  b h s d", h=self.num_heads)
-        v = rearrange(v, "b s (h d) ->  b h s d", h=self.num_heads)
+        # q = q.view(b, s, self.num_heads, self.d_k).transpose(1, 2)
+        q = rearrange(q, "b s (h d) ->  b h s d", h=self.num_heads).contiguous()
+        k = rearrange(k, "b s (h d) ->  b h s d", h=self.num_heads).contiguous()
+        v = rearrange(v, "b s (h d) ->  b h s d", h=self.num_heads).contiguous()
+        
+        if token_positions is not None:
+            q = self.rope(q, token_positions)
+            k = self.rope(k, token_positions)
         
         multi_head = scaled_dot_product_attention(q, k, v, mask)
         # read multi_head = concat(head_1, ... , head_h)
         multi_head = rearrange(multi_head, "b h s d -> b s (h d)")
         return self.o_proj(multi_head)
+    
