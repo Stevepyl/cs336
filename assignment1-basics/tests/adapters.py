@@ -14,11 +14,13 @@ from cs336_basics import (
     Linear,
     Embedding,
     RMSNorm,
-    SiLUFFN,
     SwiGLUFFN,
     RotaryPositionalEmbedding,
+    MultiHeadSelfAttention,
+    silu,
     softmax,
-    scaled_dot_product_attention
+    scaled_dot_product_attention,
+    train_bpe
 )
 
 def run_linear(
@@ -158,7 +160,14 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    multi_head_self_attn = MultiHeadSelfAttention(d_model, num_heads)
+    multi_head_self_attn.load_state_dict({
+        "q_proj.weights": q_proj_weight,
+        "k_proj.weights": k_proj_weight,
+        "v_proj.weights": v_proj_weight,
+        "o_proj.weights": o_proj_weight,
+    })
+    return multi_head_self_attn(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -415,7 +424,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return silu(in_features)
 
 
 def run_get_batch(
@@ -582,7 +591,6 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    from cs336_basics import BPETokenizer
     tokenizer = BPETokenizer(vocab, merges, special_tokens)
     return tokenizer
 
@@ -614,5 +622,4 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    from cs336_basics import train_bpe
     return train_bpe(input_path, vocab_size, special_tokens)

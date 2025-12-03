@@ -9,6 +9,7 @@ from .pre_norm_block import (
     SwiGLUFFN,
     SiLUFFN,
     RotaryPositionalEmbedding,
+    MultiHeadSelfAttention,
     scaled_dot_product_attention
 )
 from .utils import (
