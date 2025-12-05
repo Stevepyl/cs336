@@ -78,12 +78,9 @@ class SwiGLUFFN(nn.Module):
         # w1_weight(Float[Tensor, "d_ff d_model"]): Stored weights for W1
         # w2_weight(Float[Tensor, "d_model d_ff"]): Stored weights for W2
         # w3_weight(Float[Tensor, "d_ff d_model"]): Stored weights for W3
-        self.w1 = Linear(in_features=d_model,
-                         out_features=d_ff, **factory_kwargs)
-        self.w2 = Linear(
-            in_features=d_ff, out_features=d_model, **factory_kwargs)
-        self.w3 = Linear(in_features=d_model,
-                         out_features=d_ff, **factory_kwargs)
+        self.w1 = Linear(in_features=d_model, out_features=d_ff, **factory_kwargs)
+        self.w2 = Linear(in_features=d_ff, out_features=d_model, **factory_kwargs)
+        self.w3 = Linear(in_features=d_model, out_features=d_ff, **factory_kwargs)
 
     def forward(self, x: Float[Tensor, "... d_model"]) -> Float[Tensor, " ... d_model"]:
         return self.w2(silu(self.w1(x)) * self.w3(x))

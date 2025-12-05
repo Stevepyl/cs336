@@ -112,6 +112,65 @@ achieved by native OpenWebText tokenizer, it shows nearly 25% degradation.
 
 (4)uint16 is appropriate because it can represent values up to 65,535, which easily accommodates our vocabulary sizes (10K and 32K tokens), while being twice as memory-efficient as uint32 (1.9 MB vs 3.8 MB per 1M tokens) and avoiding the 255 value limit of uint8.
 
+## 3. Transformer Language Model Architecture
+### 3.6 Problem (transformer_accounting): Transformer LM resource accounting
+For given:
+```
+vocab_size : 50,257
+context_length : 1,024
+num_layers : 48
+d_model : 1,600
+num_heads : 25
+d_ff : 6,400
+```
+AB requires 2mnp FLOPs
+(a) How many trainable parameters would our model have? 
+**Embedding**: Each has `num_embeddings(vocab_size) * embedding_dim(d_model)` weights
+**TransformerBlock**: 
+    ln1(Norm1) has `d_model` weights
+    attn1 has `d_mdoel * d_model * 4 weights` (q, k, v, o are both d_model * d_model Linear layers)
+    ffn(SwiGLUFFN) has `d_model * d_ff weights * 3` (w1 w2 w3)
+    ln2(Norm2) has also `d_model` weights
+So each TransformerBlock have `2 * d_model + d_mdoel * d_model * 4 weights + d_model * d_ff weights * 3` weights
+We have `num_layers` of TransformerBlocks
+**Final Norm Layer** is the same, has `d_model` weights
+**Linear Projection Layer** has `d_model * vocab_size` weights
+So totaly we have 2,127,057,600 parameters
+The model would have approximately 2.13 billion trainable parameters, which will take 7.92GB of memory approximately
+
+(b)How many FLOPs do these matrix multiplies require in total?
+Per **q_proj operation** has `2 * seq_len * d_model * d_model` FLOPs
+Per **k_proj operation** has `2 * seq_len * d_model * d_model` FLOPs
+Per **v_proj operation** has `2 * seq_len * d_model * d_model` FLOPs
+Per **o_proj operation** has `2 * seq_len * d_model * d_model` FLOPs
+20,971,520,000 * 
+Per **Attention Calculation** has `2 * seq_len * d_k * seq_len * num_heads` + `2 * seq_len * d_v * seq_len * num_heads` 2FLOPs. In other words, it has `4 * seq_len * seq_len * d_model` FLOPs.
+
+Per **FFN(SwiGLUFFN)** has: `3 * 2 * d_ff * d_model * seq_len`  FLOPs.
+**Final Linear Projection** has `2 * d_model * vocab_size * seq_len` FLOPs
+
+So, the GPT-2 XL-shaped model has 4,513,336,524,800 FLOPs in total, approximately 4.51 TFLOPs
+
+(c) Based on your analysis above, which parts of the model require the most FLOPs?
+The SwiGLU ffn takes the most. The heavy lifting is done by the neurons processing information d_model to d_ff and back, rather than the token-to-token mixing.
+
+(d) As the model gets deeper and wider, FFN & Attention Projections increase proportionally.
+|     Component     | "Small (12L, 768d)"| "Medium (24L, 1024d)" | "Large (36L, 1280d)" |
+| ------------------|--------------------|-----------------------|----------------------|
+|     FFN Layers    |       49.8%        |         59.9%         |        64.2%         |
+|  Attn Projections |       16.6%        |         20.0%         |        21.4%         |
+|  Attn Calculation |       11.1%        |         10.0%         |        8.6%          |
+| Final Linear Proj |       22.6%        |         10.2%         |        5.8%          |
+|    Total FLOPs    |    ~350 Billion    |    ~1.03 Trillion     |    ~2.26 Trillion    |
+
+(e)Scaling the context length by 16x (from 1k to 16k) increases the total computational cost by roughly 33x(**149.5 TFLOPs**).
+
+| Component             | Share (1k Context) | Share (16k Context) | Scaling Behavior |
+| --------------------- | ------------------ | ------------------- | ---------------- |
+| Attention Calculation | 7.1%               | 55.2%               | Quadratic (N^2)  |
+| FFN Layers            | 66.9%              | 32.3%               | Linear (N)       |
+| Attention Projections | 22.3%              | 10.8%               | Linear (N)       |
+| Final Projection      | 3.6%               | 1.8%                | Linear (N)       |
 
 
 
