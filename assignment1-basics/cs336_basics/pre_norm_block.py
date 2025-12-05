@@ -41,7 +41,7 @@ class RMSNorm(nn.Module):
         self.d_model = d_model
         self.eps = eps
         factory_kwargs = {"device": device, "dtype": dtype}
-        self.weights = nn.Parameter(torch.empty(d_model, **factory_kwargs))
+        self.weight = nn.Parameter(torch.empty(d_model, **factory_kwargs))
 
     def forward(self, x: Float[Tensor, " ... d_model"]) -> torch.Tensor:
         """Process an input tensor of shape (batch_size, sequence_length, d_model) 
@@ -55,7 +55,7 @@ class RMSNorm(nn.Module):
         """
         in_dtype = x.dtype
         x = x.to(torch.float32)
-        result = x / self._rms(x) * self.weights
+        result = x / self._rms(x) * self.weight
         return result.to(in_dtype)
 
     def _rms(self, a: torch.Tensor):
@@ -177,7 +177,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.k_proj = Linear(d_model, d_model, **factory_kwargs)
         self.v_proj = Linear(d_model, d_model, **factory_kwargs)
         # o_proj is actually d_model in and h * d_v out
-        self.o_proj = Linear(d_model, d_model, **factory_kwargs)
+        self.output_proj = Linear(d_model, d_model, **factory_kwargs)
         if (theta is not None) and (max_seq_len is not None):
             self.rope = get_rope(theta, self.d_k, max_seq_len)
 
@@ -206,5 +206,5 @@ class MultiHeadSelfAttention(nn.Module):
         multi_head = scaled_dot_product_attention(q, k, v, mask)
         # read multi_head = concat(head_1, ... , head_h)
         multi_head = rearrange(multi_head, "b h s d -> b s (h d)")
-        return self.o_proj(multi_head)
+        return self.output_proj(multi_head)
     

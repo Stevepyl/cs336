@@ -12,6 +12,10 @@ from .pre_norm_block import (
     MultiHeadSelfAttention,
     scaled_dot_product_attention
 )
+from .model import (
+    TransformerBlock,
+    TransformerLM
+)
 from .utils import (
     silu,
     softmax

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import thread
 import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
@@ -7,7 +8,7 @@ from typing import IO, Any, BinaryIO
 import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
-from torch import Tensor
+from torch import Tensor, inference_mode
 
 from cs336_basics import (
     BPETokenizer,
@@ -17,6 +18,9 @@ from cs336_basics import (
     SwiGLUFFN,
     RotaryPositionalEmbedding,
     MultiHeadSelfAttention,
+    TransformerBlock,
+    TransformerLM,
+    
     silu,
     softmax,
     scaled_dot_product_attention,
@@ -43,7 +47,7 @@ def run_linear(
     """
 
     linear = Linear(d_in, d_out)
-    linear.load_state_dict({"weights": weights})
+    linear.load_state_dict({"weight": weights})
     return linear(in_features)
 
 
@@ -66,7 +70,7 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
     embedding = Embedding(vocab_size, d_model)
-    embedding.load_state_dict({"weights": weights})
+    embedding.load_state_dict({"weight": weights})
     return embedding(token_ids)
 
 
@@ -101,9 +105,9 @@ def run_swiglu(
     # swiglu.w3.weight.data = w3_weight
     swiglu = SwiGLUFFN(d_ff=d_ff, d_model=d_model)
     swiglu.load_state_dict({
-        "w1.weights": w1_weight,
-        "w2.weights": w2_weight,
-        "w3.weights": w3_weight
+        "w1.weight": w1_weight,
+        "w2.weight": w2_weight,
+        "w3.weight": w3_weight
     })
     return swiglu(in_features)
 
@@ -162,10 +166,10 @@ def run_multihead_self_attention(
     """
     multi_head_self_attn = MultiHeadSelfAttention(d_model, num_heads)
     multi_head_self_attn.load_state_dict({
-        "q_proj.weights": q_proj_weight,
-        "k_proj.weights": k_proj_weight,
-        "v_proj.weights": v_proj_weight,
-        "o_proj.weights": o_proj_weight,
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "output_proj.weight": o_proj_weight,
     })
     return multi_head_self_attn(in_features)
 
@@ -214,10 +218,10 @@ def run_multihead_self_attention_with_rope(
         max_seq_len=max_seq_len
     )
     multi_head_self_attn.load_state_dict({
-        "q_proj.weights": q_proj_weight,
-        "k_proj.weights": k_proj_weight,
-        "v_proj.weights": v_proj_weight,
-        "o_proj.weights": o_proj_weight,
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "output_proj.weight": o_proj_weight,
     })
     return multi_head_self_attn(in_features, token_positions)
 
@@ -315,7 +319,14 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    blk = TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, max_seq_len=max_seq_len, theta=theta)
+    blk.load_state_dict(weights)
+    seq_len = in_features.shape[1]
+    # adds a new dimension at index 0 (the front).
+    # Before: torch.arange(seq_len) produces shape(seq_len,) — e.g., [0, 1, 2, 3]
+    # After: .unsqueeze(0) produces shape(1, seq_len) — e.g., [[0, 1, 2, 3]]
+    token_positions = torch.arange(seq_len, device=in_features.device).unsqueeze(0)
+    return blk(in_features, token_positions)
 
 
 def run_transformer_lm(
@@ -397,8 +408,11 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
-
+    lm = TransformerLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta)
+    lm.load_state_dict(weights)
+    seq_len = in_indices.shape[1]
+    token_positions = torch.arange(end=seq_len, device=in_indices.device).unsqueeze(0)
+    return lm(in_indices, token_positions)
 
 def run_rmsnorm(
     d_model: int,
@@ -421,7 +435,7 @@ def run_rmsnorm(
         RMSNorm of the `in_features`.
     """
     my_rms_norm = RMSNorm(d_model, eps)
-    my_rms_norm.load_state_dict({"weights": weights})
+    my_rms_norm.load_state_dict({"weight": weights})
     return my_rms_norm(in_features)
 
 
