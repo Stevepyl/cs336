@@ -2,9 +2,11 @@ from functools import lru_cache
 from typing import Iterable
 import regex as re
 import json
+import heapq
 
 GPT2_PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}++| ?\p{N}++| ?[^\s\p{L}\p{N}]++|\s++$|\s+(?!\S)|\s"""
 GPT2_REGEX = re.compile(GPT2_PAT)
+
 
 class BPETokenizer:
     def __init__(
@@ -24,7 +26,8 @@ class BPETokenizer:
                 be split into multiple tokens, and will always be kept as a single token.
         """
         self.vocab = vocab
-        self.vocab_inverse = {v: k for k, v in self.vocab.items()}
+        self.vocab_inverse: dict[bytes, int] = {
+            v: k for k, v in self.vocab.items()}
         # 将 list 转为 dict，记录每个 pair 的 rank (索引)
         self.merges = {pair: i for i, pair in enumerate(merges)}
         self.special_tokens = special_tokens
@@ -76,26 +79,7 @@ class BPETokenizer:
             if self.special_tokens is not None and token.decode("utf-8") in self.special_tokens:
                 token_ids.append(self.vocab_inverse[token])
                 continue
-            
-            token_bytes: list[bytes] = [token[i:i+1]
-                                        for i in range(len(token))]
-            while len(token_bytes) >= 2:
-                pairs = list(zip(token_bytes, token_bytes[1:]))
-                # print(f"Pairs of {token} now is {pairs}")
-                pair_to_merge = None
-                min_rank = float("inf")
-                for i in range(len(token_bytes) - 1):
-                    pair = (token_bytes[i], token_bytes[i+1])
-                    rank = self.merges.get(pair, float("inf"))
-                    if rank < min_rank:
-                        min_rank = rank
-                        pair_to_merge = pair
-                if pair_to_merge is None:
-                    break
-                token_bytes = self._merge_pair(token_bytes, pair_to_merge)
-
-            for t in token_bytes:
-                token_ids.append(self.vocab_inverse[t])
+            token_ids.extend(self._bpe_merge_word(token))
 
         return token_ids
 
@@ -140,6 +124,74 @@ class BPETokenizer:
                 new_token.append(tokens[i])
                 i += 1
         return new_token
+
+    # a small number of words account for the vast majority of text occurrences.
+    # using cache to store the most frequent tokens
+    # avoid repeat merge
+    # get 5x improvment
+    @lru_cache(maxsize=5000)
+    def _bpe_merge_word(self, token: bytes) -> list[int]:
+        token_bytes: list[bytes] = [token[i:i+1] for i in range(len(token))]
+        length = len(token_bytes)
+
+        if length < 2:
+            return [self.vocab_inverse[t] for t in token_bytes]
+
+        next_idx = list(range(1, length + 1))
+        next_idx[-1] = -1  # -1 indicates the end of the list
+        prev_idx = list(range(-1, length - 1))  # -1 indicates the start
+
+        # Stores tuples of (rank, index), where 'index' represents the pair (token_bytes[index], token_bytes[next_idx[index]])
+        pq = []
+
+        def get_rank(i):
+            # Helper to get rank of pair starting at i
+            if i == -1 or next_idx[i] == -1:
+                return float('inf')
+            pair = (token_bytes[i], token_bytes[next_idx[i]])
+            return self.merges.get(pair, float('inf'))
+
+        def push_pair(i):
+            # Helper to push valid pairs to heap
+            rank = get_rank(i)
+            if rank != float('inf'):
+                heapq.heappush(pq, (rank, i))
+
+        for i in range(length - 1):
+            push_pair(i)
+
+        # Initial population of the heap
+        while pq:
+            rank, i = heapq.heappop(pq)
+            # Check if the rank in the heap matches the ACTUAL current rank.
+            # If token_bytes[i] or token_bytes[next_idx[i]] changed due to other merges, get_rank(i) will differ.
+            if get_rank(i) != rank:
+                continue
+
+            j = next_idx[i]
+            # A. Update token at 'i' (Merge j into i)
+            token_bytes[i] += token_bytes[j]
+
+            # delete and re-link the link list
+            k = next_idx[j]
+            next_idx[i] = k
+            next_idx[j] = -1
+            if k != -1:
+                prev_idx[k] = i
+
+            # The pair starting at 'i' has changed (it's now i+k instead of i+j)
+            push_pair(i)
+            # The pair ending at 'i' (starting at prev_idx[i]) has changed target
+            if prev_idx[i] != -1:
+                push_pair(prev_idx[i])
+
+        result: list[int] = []
+        curr = 0
+        while curr != -1:
+            result.append(self.vocab_inverse[token_bytes[curr]])
+            curr = next_idx[curr]
+
+        return result
 
     @staticmethod
     @lru_cache()
@@ -193,4 +245,3 @@ class BPETokenizer:
         else:
             for match in GPT2_REGEX.finditer(text):
                 yield match.group(0).encode("utf-8")
-        

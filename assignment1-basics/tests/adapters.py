@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import thread
 import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
@@ -7,8 +8,24 @@ from typing import IO, Any, BinaryIO
 import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
-from torch import Tensor
+from torch import Tensor, inference_mode
 
+from cs336_basics import (
+    BPETokenizer,
+    Linear,
+    Embedding,
+    RMSNorm,
+    SwiGLUFFN,
+    RotaryPositionalEmbedding,
+    MultiHeadSelfAttention,
+    TransformerBlock,
+    TransformerLM,
+    
+    silu,
+    softmax,
+    scaled_dot_product_attention,
+    train_bpe
+)
 
 def run_linear(
     d_in: int,
@@ -29,7 +46,9 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    raise NotImplementedError
+    linear = Linear(d_in, d_out)
+    linear.load_state_dict({"weight": weights})
+    return linear(in_features)
 
 
 def run_embedding(
@@ -50,8 +69,9 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
-    raise NotImplementedError
+    embedding = Embedding(vocab_size, d_model)
+    embedding.load_state_dict({"weight": weights})
+    return embedding(token_ids)
 
 
 def run_swiglu(
@@ -83,7 +103,13 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    swiglu = SwiGLUFFN(d_ff=d_ff, d_model=d_model)
+    swiglu.load_state_dict({
+        "w1.weight": w1_weight,
+        "w2.weight": w2_weight,
+        "w3.weight": w3_weight
+    })
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -104,7 +130,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    return scaled_dot_product_attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
@@ -138,7 +164,14 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    multi_head_self_attn = MultiHeadSelfAttention(d_model, num_heads)
+    multi_head_self_attn.load_state_dict({
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "output_proj.weight": o_proj_weight,
+    })
+    return multi_head_self_attn(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -178,7 +211,19 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    multi_head_self_attn = MultiHeadSelfAttention(
+        d_model=d_model,
+        num_heads=num_heads,
+        theta=theta,
+        max_seq_len=max_seq_len
+    )
+    multi_head_self_attn.load_state_dict({
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "output_proj.weight": o_proj_weight,
+    })
+    return multi_head_self_attn(in_features, token_positions)
 
 
 def run_rope(
@@ -200,7 +245,8 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    rope = RotaryPositionalEmbedding(theta, d_k, max_seq_len)
+    return rope(in_query_or_key, token_positions)
 
 
 def run_transformer_block(
@@ -273,7 +319,14 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    blk = TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, max_seq_len=max_seq_len, theta=theta)
+    blk.load_state_dict(weights)
+    seq_len = in_features.shape[1]
+    # adds a new dimension at index 0 (the front).
+    # Before: torch.arange(seq_len) produces shape(seq_len,) — e.g., [0, 1, 2, 3]
+    # After: .unsqueeze(0) produces shape(1, seq_len) — e.g., [[0, 1, 2, 3]]
+    token_positions = torch.arange(seq_len, device=in_features.device).unsqueeze(0)
+    return blk(in_features, token_positions)
 
 
 def run_transformer_lm(
@@ -355,8 +408,11 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
-
+    lm = TransformerLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta)
+    lm.load_state_dict(weights)
+    seq_len = in_indices.shape[1]
+    token_positions = torch.arange(end=seq_len, device=in_indices.device).unsqueeze(0)
+    return lm(in_indices, token_positions)
 
 def run_rmsnorm(
     d_model: int,
@@ -378,7 +434,9 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    my_rms_norm = RMSNorm(d_model, eps)
+    my_rms_norm.load_state_dict({"weight": weights})
+    return my_rms_norm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -392,7 +450,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return silu(in_features)
 
 
 def run_get_batch(
@@ -431,7 +489,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    return softmax(in_features, dim)
 
 
 def run_cross_entropy(
@@ -559,7 +617,6 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    from cs336_basics import BPETokenizer
     tokenizer = BPETokenizer(vocab, merges, special_tokens)
     return tokenizer
 
@@ -591,5 +648,4 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    from cs336_basics import train_bpe
     return train_bpe(input_path, vocab_size, special_tokens)
