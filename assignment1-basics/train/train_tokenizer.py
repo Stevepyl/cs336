@@ -8,12 +8,12 @@ from cs336_basics import train_bpe
 
 def main():
     parser = argparse.ArgumentParser(
-        description="bpe train"
+        description="bpe train",
     )
 
     parser.add_argument(
         "--output_dir",
-        type=str
+        type=str,
     )
 
     parser.add_argument(
@@ -27,6 +27,12 @@ def main():
         type=str,
         default="./data/TinyStoriesV2-GPT4-train.txt",
     )
+    
+    parser.add_argument(
+        "--num_process",
+        type=int,
+        default=8,
+    )
 
     args, unknown_args = parser.parse_known_args()
     print(f"{args=}")
@@ -38,9 +44,10 @@ def main():
 
     special_tokens = ["<|endoftext|>"]
 
-    print(f"Train BPE tokenizer on {data_path}, vocab_size is {vocab_size}")
+    print(
+        f"Train BPE tokenizer on {data_path}, vocab_size is {vocab_size}, process num is {args.num_process}")
     start_time = time.perf_counter()
-    vocab, merges = train_bpe(data_path, vocab_size, special_tokens, 8)
+    vocab, merges = train_bpe(data_path, vocab_size, special_tokens, args.num_process)
     end_time = time.perf_counter()
     save_tokenizer(vocab, merges, output_dir)
     print(f"total train time: {end_time - start_time:.2f} seconds")
@@ -67,7 +74,7 @@ def main():
 def save_tokenizer(
     vocab: dict[int, bytes],
     merges: list[tuple[bytes, bytes]],
-    output_dir: str
+    output_dir: str,
 ):
     byte_encoder = bytes_to_unicode()
     
@@ -86,7 +93,7 @@ def save_tokenizer(
             f.write(f"{first} {second}\n")
     
 
-@lru_cache()
+@lru_cache
 def bytes_to_unicode():
     """
     **FROM https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/gpt2/tokenization_gpt2.py#L37**
