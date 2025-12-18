@@ -20,7 +20,11 @@ case "$train_mode" in
         ;;
     full)
         data_path='data/TinyStoriesV2-GPT4-train.txt'
-        vocab_size=10000
+        vocab_size=32000
+        ;;
+    owt_full)
+        data_path='data/owt_valid.txt'
+        vocab_size=32000
         ;;
     *)
         echo "Unknown train_mode: $train_mode" >&2

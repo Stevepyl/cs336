@@ -15,7 +15,7 @@ def train_bpe(
     input_path: str | os.PathLike,
     vocab_size: int,
     special_tokens: list[str],
-    num_processes: int = 8
+    num_processes: int = 8,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """
     Given a path to an input text file, trains a (byte-level) BPE
@@ -76,13 +76,16 @@ def train_bpe(
     # merges = _merge(pre_tokens, global_token_counts, pair_counts, pair_to_tokens, merge_time)
     cpp_merges = bpe_cpp.merge_cpp(pre_tokens, global_token_counts, pair_counts, pair_to_tokens, merge_time)
     merge_end_time = time.perf_counter()
-    print(f"\nTime using of merges: {merge_end_time - merge_start_time:.2f}s")
-
+    print(f"Get merges using: {merge_end_time - merge_start_time:.2f}s")
+        
     # 4. compute vocabs
+    compute_vocab_start = time.perf_counter()
     idx = len(vocab)
     for (t0, t1) in cpp_merges:
         vocab[idx] = t0 + t1
         idx += 1
+    compute_vocab_end = time.perf_counter()
+    print(f"Compute vocab using: {(compute_vocab_end - compute_vocab_start):.2f}s")
     return (vocab, cpp_merges)
 
 
@@ -97,10 +100,10 @@ def _init_vocab(special_tokens: list[str]) -> dict[int, bytes]:
 
 def _get_pair_count(
     pre_token_counts: defaultdict[bytes, int],
-    pre_tokens: dict[bytes, list[bytes]]
+    pre_tokens: dict[bytes, list[bytes]],
 ) -> tuple[
     defaultdict[tuple[bytes, bytes], set],
-    defaultdict[tuple[bytes, bytes], int]
+    defaultdict[tuple[bytes, bytes], int],
 ]:
     """Count pair count and return a byte-pair to its token-index-set
 
@@ -137,7 +140,7 @@ def _get_pair_count(
 
 def _merge_pair(
     tokens: list[bytes],
-    pair: tuple[bytes, bytes]
+    pair: tuple[bytes, bytes],
 ) -> list[bytes]:
     """Merge all occurrences of a specified byte pair in a list of byte tokens.
     Args:
@@ -165,7 +168,7 @@ def _merge(
         pre_token_counts: defaultdict[bytes, int],
         pair_counts: defaultdict[tuple[bytes, bytes], int],
         pair_to_tokens: defaultdict[tuple[bytes, bytes], set],
-        merge_time: int
+        merge_time: int,
 ) -> list[tuple[bytes, bytes]]:
     """
         Perform BPE merges by iteratively merging the most frequent byte pair.
@@ -192,15 +195,21 @@ def _merge(
             - Pairs with zero count are removed from pair_counts and pair_to_tokens.
         """
     merges: list[tuple[bytes, bytes]] = []
+    get_top_pair_time = 0.0
+    update_affected_pairs_time = 0.0
     for i in range(merge_time):
         # 这样会先按 count 降序（因为 max 取最大值），count 相同时再按 pair 本身的字典序升序（tuple 默认字典序比较）选择最大的 pair。
+        get_top_pair_start = time.perf_counter()
         top_pair = max(pair_counts, key=lambda x: (pair_counts[x], x))
-        print(f"merging :{top_pair}")
+        get_top_pair_end = time.perf_counter()
+        get_top_pair_time += (get_top_pair_end - get_top_pair_start)
+        
         merges.append(top_pair)
 
         # Update affected tokens
         # For example, the top-pair is ('h', 'e'), then we need to update the bytes list of "The", "They", "she"...
         affected_tokens = pair_to_tokens[top_pair].copy()
+        update_start = time.perf_counter()
         for affected_token in affected_tokens:
             affected_token_bytes = pre_tokens[affected_token]
             # Single bytes needn't to update
@@ -220,6 +229,10 @@ def _merge(
                 pair_counts[pair] += pre_token_counts[affected_token]
                 pair_to_tokens[pair].add(affected_token)
             pre_tokens[affected_token] = affected_token_bytes
+        update_end = time.perf_counter()
+        update_affected_pairs_time += (update_end - update_start)
+    print(f"Get top-pair using: {get_top_pair_time:.2f}s")
+    print(f"Update pairs using: {update_affected_pairs_time:.2f}s")
     return merges
 
 
@@ -275,7 +288,7 @@ def _process_chunk(
     input_path: str,
     start: int,
     end: int,
-    special_tokens: list[str]
+    special_tokens: list[str],
 ) -> defaultdict[bytes, int]:
     """
     Process a chunk of the input file for BPE training. 

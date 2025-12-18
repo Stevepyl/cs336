@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Iterable
+from collections.abc import Iterable
 import regex as re
 import json
 import heapq
@@ -13,7 +13,7 @@ class BPETokenizer:
         self,
         vocab: dict[int, bytes],
         merges: list[tuple[bytes, bytes]],
-        special_tokens: list[str] | None = None
+        special_tokens: list[str] | None = None,
     ):
         """
         Args:
@@ -37,7 +37,7 @@ class BPETokenizer:
         cls,
         vocab_filepath: str,
         merges_filepath: str,
-        special_tokens: list[str] | None = None
+        special_tokens: list[str] | None = None,
     ):
         '''
         Load a BPETokenizer from vocab and merges files.
@@ -69,7 +69,7 @@ class BPETokenizer:
 
     def encode(
         self,
-        text: str
+        text: str,
     ) -> list[int]:
         token_ids: list[int] = []
         # If text is "Hello world! It's 42."
@@ -85,14 +85,14 @@ class BPETokenizer:
 
     def encode_iterable(
         self,
-        iterable: Iterable[str]
+        iterable: Iterable[str],
     ) -> Iterable[int]:
         for text in iterable:
             yield from self.encode(text)
 
     def decode(
         self,
-        ids: list[int]
+        ids: list[int],
     ) -> str:
         text_bytes: bytes = bytes()
         for id in ids:
@@ -103,7 +103,7 @@ class BPETokenizer:
     @staticmethod
     def _merge_pair(
         tokens: list[bytes],
-        pair: tuple[bytes, bytes]
+        pair: tuple[bytes, bytes],
     ) -> list[bytes]:
         """Merge all occurrences of a specified byte pair in a list of byte tokens.
         Args:
@@ -194,7 +194,7 @@ class BPETokenizer:
         return result
 
     @staticmethod
-    @lru_cache()
+    @lru_cache
     def _bytes_to_unicode():
         """
         **FROM https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/gpt2/tokenization_gpt2.py#L37**
@@ -227,7 +227,7 @@ class BPETokenizer:
     # Considering its a static method, so just pass the special tokens as a parameter
     def _process_chunk(
         text: str,
-        special_tokens: list[str] | None
+        special_tokens: list[str] | None,
     ) -> Iterable[bytes]:
         pre_tokens: list[bytes] = []
         if special_tokens is not None:

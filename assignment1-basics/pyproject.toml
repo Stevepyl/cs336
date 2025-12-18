@@ -3,7 +3,7 @@ name = "cs336_basics"
 version = "1.0.6"
 description = "CS336 Assignment 1"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "einops>=0.8.1", # tensor operations
     "einx>=0.3.0", # more general tensor operations
@@ -48,9 +48,14 @@ line-length = 120
 
 [tool.ruff.lint]
 extend-select = ["UP"]
-ignore = [
-    "F722"
-]
+ignore = ["F722", "UP012", "UP015"]
+select = ["COM812"]
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "lf"
+docstring-code-format = true
+skip-magic-trailing-comma = false
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
