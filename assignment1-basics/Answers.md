@@ -173,4 +173,6 @@ The SwiGLU ffn takes the most. The heavy lifting is done by the neurons processi
 | Final Projection      | 3.6%               | 1.8%                | Linear (N)       |
 
 
-
+## 4. Training a Transformer Language Model
+### 4.2 Problem (learning_rate_tuning) Tuning the Learning Rate
+The loss in all of these learning rates are decaying, but the loss decays faster when learning rate is 1e-3

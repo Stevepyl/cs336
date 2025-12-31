@@ -9,7 +9,7 @@ from functools import lru_cache
 from cs336_basics.basic_block import Linear
 from cs336_basics.utils import (
     silu,
-    softmax
+    softmax,
 )
 
 
@@ -17,7 +17,7 @@ def scaled_dot_product_attention(
     queries: Float[Tensor, "batch_size ... seq_len d_k"],
     key: Float[Tensor, "batch_size ... seq_len d_k"],
     values: Float[Tensor, "batch_size ... seq_len d_v"],
-    mask: Bool[Tensor, "seq_len seq_len"] | None = None
+    mask: Bool[Tensor, "seq_len seq_len"] | None = None,
 ) -> Float[Tensor, "batch_size ... d_v"]:
     d_k = queries.shape[-1]
     score = torch.matmul(queries, key.transpose(-2, -1)) / math.sqrt(d_k)
@@ -25,7 +25,7 @@ def scaled_dot_product_attention(
     if mask is not None:
         score = score.masked_fill(mask == False, float('-inf'))
     score = softmax(score, dim=-1)
-    attention: Float[Tensor, "batch_size, ..., d_v"] = torch.matmul(score, values)
+    attention: Float[Tensor, "batch_size ... d_v"] = torch.matmul(score, values)
     return attention
 
 
@@ -35,7 +35,7 @@ class RMSNorm(nn.Module):
         d_model: int,
         eps: float = 1e-5,
         device: torch.device | None = None,
-        dtype: torch.dtype | None = None
+        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         self.d_model = d_model
@@ -69,7 +69,7 @@ class SwiGLUFFN(nn.Module):
         d_ff: int,
         d_model: int,
         device: torch.device | None = None,
-        dtype: torch.dtype | None = None
+        dtype: torch.dtype | None = None,
     ):
         super().__init__()
         self.d_ff = d_ff
@@ -92,7 +92,7 @@ class SiLUFFN(nn.Module):
         d_ff: int,
         d_model: int,
         device: torch.device | None = None,
-        dtype: torch.dtype | None = None
+        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         self.d_ff = d_ff
@@ -125,7 +125,7 @@ class RotaryPositionalEmbedding(nn.Module):
     def forward(
         self,
         x: Float[Tensor, " batch_size sequence_length d_k"],
-        token_positions: Float[Tensor, " ... sequence_length"]
+        token_positions: Float[Tensor, " ... sequence_length"],
     ) -> torch.Tensor:
         x = x.view(*x.shape[:-1], -1, 2)
         x = torch.view_as_complex(x)

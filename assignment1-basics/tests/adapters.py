@@ -23,8 +23,11 @@ from cs336_basics import (
     
     silu,
     softmax,
+    cross_entropy_loss,
     scaled_dot_product_attention,
-    train_bpe
+    train_bpe,
+    
+    AdamW,
 )
 
 def run_linear(
@@ -107,7 +110,7 @@ def run_swiglu(
     swiglu.load_state_dict({
         "w1.weight": w1_weight,
         "w2.weight": w2_weight,
-        "w3.weight": w3_weight
+        "w3.weight": w3_weight,
     })
     return swiglu(in_features)
 
@@ -215,7 +218,7 @@ def run_multihead_self_attention_with_rope(
         d_model=d_model,
         num_heads=num_heads,
         theta=theta,
-        max_seq_len=max_seq_len
+        max_seq_len=max_seq_len,
     )
     multi_head_self_attn.load_state_dict({
         "q_proj.weight": q_proj_weight,
@@ -454,7 +457,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
 
 
 def run_get_batch(
-    dataset: npt.NDArray, batch_size: int, context_length: int, device: str
+    dataset: npt.NDArray, batch_size: int, context_length: int, device: str,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Given a dataset (a 1D numpy array of integers) and a desired batch size and
@@ -493,7 +496,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
 
 
 def run_cross_entropy(
-    inputs: Float[Tensor, " batch_size vocab_size"], targets: Int[Tensor, " batch_size"]
+    inputs: Float[Tensor, " batch_size vocab_size"], targets: Int[Tensor, " batch_size"],
 ) -> Float[Tensor, ""]:
     """Given a tensor of inputs and targets, compute the average cross-entropy
     loss across examples.
@@ -507,7 +510,7 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    return cross_entropy_loss(inputs, targets)
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
@@ -526,7 +529,7 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    return AdamW
 
 
 def run_get_lr_cosine_schedule(

@@ -16,7 +16,7 @@ class TransformerLM(nn.Module):
         d_ff: int,
         rope_theta: float,
         device: torch.device | None = None,
-        dtype: torch.dtype | None = None
+        dtype: torch.dtype | None = None,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -32,7 +32,7 @@ class TransformerLM(nn.Module):
             num_embeddings=vocab_size, embedding_dim=d_model, **factory_kwargs)
         self.layers = nn.ModuleList([
             TransformerBlock(
-                d_model, num_heads, d_ff, context_length, rope_theta, **factory_kwargs
+                d_model, num_heads, d_ff, context_length, rope_theta, **factory_kwargs,
             ) for _ in range(num_layers)
         ])
         self.ln_final = RMSNorm(d_model, **factory_kwargs)
@@ -61,7 +61,7 @@ class TransformerBlock(nn.Module):
         theta: float = 10000.0,
         eps: float = 1e-5,
         device: torch.device | None = None,
-        dtype: torch.dtype | None = None
+        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         self.d_model = d_model
@@ -79,12 +79,12 @@ class TransformerBlock(nn.Module):
             num_heads=self.num_heads,
             theta=self.theta,
             max_seq_len=self.max_seq_len,
-            **factory_kwargs
+            **factory_kwargs,
         )
         self.ffn = SwiGLUFFN(
             d_ff=self.d_ff,
             d_model=self.d_model,
-            **factory_kwargs
+            **factory_kwargs,
         )
         self.ln2 = RMSNorm(d_model=self.d_model,
                            eps=self.eps, **factory_kwargs)
