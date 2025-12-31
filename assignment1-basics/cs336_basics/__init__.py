@@ -20,11 +20,14 @@ from .utils import (
     silu,
     softmax,
     cross_entropy_loss,
+    gradient_clipping,
 )
 
 from .optimizer import (
     AdamW,
+    cosine_learning_rate_schedule,
 )
 
 import importlib.metadata
+
 __version__ = importlib.metadata.version("cs336_basics")

@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 from jaxtyping import Float, Int
+from collections.abc import Iterable
 
 def silu(x: torch.Tensor) -> torch.Tensor:
     return x * torch.sigmoid(x)
@@ -42,3 +43,20 @@ def get_perplexity(
     targets: Int[Tensor, " batch_size"],
 ) -> Float[Tensor, ""]:
     return cross_entropy_loss(inputs, targets).exp()
+
+
+def gradient_clipping(
+    parameters: Iterable[torch.nn.Parameter],
+    max_l2_norm: float,
+    eps: float = 1e-6,
+) -> None:
+    total_norm = 0.0
+    for p in parameters:
+        if p.grad is not None:
+            param_norm = p.grad.data.norm(2)
+            total_norm += param_norm.item() ** 2
+    total_norm = total_norm**0.5
+    if total_norm >= max_l2_norm:
+        for p in parameters:
+            if p.grad is not None:
+                p.grad.mul_(max_l2_norm / total_norm + eps)
