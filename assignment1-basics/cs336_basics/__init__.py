@@ -28,6 +28,10 @@ from .optimizer import (
     cosine_learning_rate_schedule,
 )
 
+from .data_loader import (
+    get_batch,
+)
+
 import importlib.metadata
 
 __version__ = importlib.metadata.version("cs336_basics")

@@ -31,6 +31,8 @@ from cs336_basics import (
     
     AdamW,
     cosine_learning_rate_schedule,
+    
+    get_batch,
 )
 
 def run_linear(
@@ -479,7 +481,7 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    return get_batch(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
