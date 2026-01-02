@@ -38,3 +38,4 @@ def get_batch(
     x, y = x.to(device), y.to(device)
     return x, y
     
+    # When sampling from your dataset (i.e., a numpy array) during training, be sure load the dataset in memory-mapped mode

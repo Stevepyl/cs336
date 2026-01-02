@@ -32,6 +32,11 @@ from .data_loader import (
     get_batch,
 )
 
+from .checkpoint import (
+    load_checkpoint,
+    save_checkpoint,
+)
+
 import importlib.metadata
 
 __version__ = importlib.metadata.version("cs336_basics")
