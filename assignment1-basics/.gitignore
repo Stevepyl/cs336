@@ -161,8 +161,9 @@ cython_debug/
 
 .ruff_cache/
 *.zip
-data/
-model/
+/data/
+/outputs/
+/tokenizer/
 test.py
 .DS_Store
 .vscode

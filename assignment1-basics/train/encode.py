@@ -12,7 +12,7 @@ def main():
     ts_tokenizer = BPETokenizer.from_files(
         vocab_filepath=os.path.join(TS_TOKENIZER_PATH, "vocab.json"),
         merges_filepath=os.path.join(TS_TOKENIZER_PATH, "merges.txt"),
-        special_tokens=["<|endoftext|>"]
+        special_tokens=["<|endoftext|>"],
     )
     encode_to_bin(ts_tokenizer, "TinyStoriesV2-GPT4-train")
     encode_to_bin(ts_tokenizer, "TinyStoriesV2-GPT4-valid")
@@ -31,7 +31,7 @@ def main():
 def encode_to_bin(
     tokenizer: BPETokenizer,
     dataset: str,
-    chunk_lines: int = 50000
+    chunk_lines: int = 50000,
 ):
     encoded_output = open(os.path.join(DATA_PATH, f"encoded/{dataset}.bin"), 'ab')
     with open(os.path.join(DATA_PATH, f"{dataset}.txt"), 'r', encoding="utf-8") as f:
