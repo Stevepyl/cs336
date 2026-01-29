@@ -125,27 +125,27 @@ d_ff : 6,400
 ```
 AB requires 2mnp FLOPs
 === How many trainable parameters would our model have? 
-*Embedding*: Each has `num_embeddings(vocab_size)` #sym.times `embedding_dim(d_model)` weights
+*Embedding*: Each has $"num_embeddings(vocab_size)" #sym.times "embedding_dim(d_model)"$ weights
 *TransformerBlock*: 
-    - ln1(Norm1) has `d_model` weights
-    - attn1 has `d_mdoel` #sym.times `d_model` #sym.times `4 weights` (q, k, v, o are both `d_model` #sym.times `d_model` Linear layers)
-    - ffn(SwiGLUFFN) has `d_model` #sym.times `d_ff weights` #sym.times `3 (w1 w2 w3)`
-    - ln2(Norm2) has also `d_model` weights
+    - ln1(Norm1) has d_model weights
+    - attn1 has $"d_mdoel" #sym.times "d_model" #sym.times 4 "weights"$ (q, k, v, o are both $"d_model" #sym.times "d_model"$ Linear layers)
+    - ffn(SwiGLUFFN) has $"d_model" #sym.times "d_ff"$ weights and multiplies with 3(w1 w2 w3).
+    - ln2(Norm2) has also d_model weights
 So each TransformerBlock have 
 #align(center)[
-$2 #sym.times "d_model" + "d_mdoel" #sym.times "d_model" #sym.times 4"weights" + "d_model" #sym.times "d_ff weights" #sym.times 3`$ weights
-]
+$2 #sym.times "d_model" + "d_mdoel" #sym.times "d_model" #sym.times 4"weights" + "d_model" #sym.times "d_ff weights" #sym.times 3$ 
+]weights
 We have `num_layers` of TransformerBlocks
-- *Final Norm Layer* is the same, has `d_model` weights
-- *Linear Projection Layer* has `d_model * vocab_size` weights
+- *Final Norm Layer* is the same, has d_model weights
+- *Linear Projection Layer* has $"d_model" #sym.times "vocab_size" $ weights
 So totaly we have 2,127,057,600 parameters \
 The model would have approximately 2.13 billion trainable parameters, which will take 7.92GB of memory approximately
 
 === How many FLOPs do these matrix multiplies require in total?
-- Per *q_proj operation* has `2 * seq_len * d_model * d_model` FLOPs
-- Per *k_proj operation* has `2 * seq_len * d_model * d_model` FLOPs
-- Per *v_proj operation* has `2 * seq_len * d_model * d_model` FLOPs
-- Per *o_proj operation* has `2 * seq_len * d_model * d_model` FLOPs
+- Per *q_proj operation* has $2 #sym.times "seq_len" #sym.times "d_model" #sym.times "d_model"$ FLOPs
+- Per *k_proj operation* has $2 #sym.times "seq_len" #sym.times "d_model" #sym.times "d_model"$ FLOPs
+- Per *v_proj operation* has $2 #sym.times "seq_len" #sym.times "d_model" #sym.times "d_model"$ FLOPs
+- Per *o_proj operation* has $2 #sym.times "seq_len" #sym.times "d_model" #sym.times "d_model"$ FLOPs
 Which adding up to 20,971,520,000 \ 
 - Per *Attention Calculation* has 
 #align(center)[
