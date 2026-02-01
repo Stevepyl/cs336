@@ -58,3 +58,8 @@ docstring-code-format = true
 line-ending = "lf"
 quote-style = "double"
 skip-magic-trailing-comma = false
+
+[tool.ty]
+
+[tool.ty.rules]
+invalid-argument-type = "ignore"

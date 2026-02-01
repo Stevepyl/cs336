@@ -54,7 +54,7 @@ class TrainingConfig:
     eval_iters: int = 200
     resume_from: str | None = None
     out_dir: str = "outputs"  # From training/default.yaml
-    save_ckpt: bool = False
+    save_checkpoint: bool = False
 
 
 @dataclass
@@ -120,7 +120,7 @@ class TrainConfig:
             "_self_",
             {"data": "default"},
             {"hydra": "default"},
-            {"model": "tinystories"},
+            {"model": "default"},
             {"optimizer": "adamw"},
             {"training": "default"},
             {"logger": "wandb"},

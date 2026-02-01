@@ -1,5 +1,6 @@
 from functools import lru_cache
 from collections.abc import Iterable
+from os import PathLike
 import regex as re
 import json
 import heapq
@@ -35,15 +36,15 @@ class BPETokenizer:
     @classmethod
     def from_files(
         cls,
-        vocab_filepath: str,
-        merges_filepath: str,
+        vocab_filepath: str | bytes | PathLike[str] | PathLike[bytes],
+        merges_filepath: str | bytes | PathLike[str] | PathLike[bytes],
         special_tokens: list[str] | None = None,
     ):
         '''
         Load a BPETokenizer from vocab and merges files.
         Args:
-            vocab_filepath (str): Path to the vocabulary file (JSON format).
-            merges_filepath (str): Path to the merges file (text format).
+            vocab_filepath (PathLike): Path to the vocabulary file (JSON format).
+            merges_filepath (PathLike): Path to the merges file (text format).
             special_tokens (list[str] | None): A list of string special tokens for the tokenizer. These strings will never
                 be split into multiple tokens, and will always be kept as a single token.
         Returns:
