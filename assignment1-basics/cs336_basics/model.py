@@ -3,7 +3,7 @@ from click.core import batch
 import torch
 import torch.nn as nn
 
-from .pre_norm_block import RMSNorm, SwiGLUFFN, MultiHeadSelfAttention
+from .pre_norm_block import RMSNorm, SwiGLUFFN, SiLUFFN, MultiHeadSelfAttention
 from .basic_block import Embedding, Linear
 from .utils import softmax
 
@@ -56,6 +56,7 @@ class TransformerLM(nn.Module):
         rope_theta: float,
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
+        **kwargs,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -108,6 +109,7 @@ class TransformerBlock(nn.Module):
         eps: float = 1e-5,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
+        **kwargs,
     ) -> None:
         super().__init__()
         self.d_model = d_model
@@ -117,6 +119,7 @@ class TransformerBlock(nn.Module):
         self.theta = theta
         self.max_seq_len = max_seq_len
         factory_kwargs = {"device": device, "dtype": dtype}
+        ffn_type = kwargs.get("ffn_type", "swiglu")
         self.ln1 = RMSNorm(d_model=self.d_model, eps=self.eps, **factory_kwargs)
 
         self.attn = MultiHeadSelfAttention(
@@ -126,11 +129,13 @@ class TransformerBlock(nn.Module):
             max_seq_len=self.max_seq_len,
             **factory_kwargs,
         )
-        self.ffn = SwiGLUFFN(
-            d_ff=self.d_ff,
-            d_model=self.d_model,
-            **factory_kwargs,
-        )
+        if ffn_type == "swiglu":
+            self.ffn = SwiGLUFFN(d_ff=self.d_ff,d_model=self.d_model,**factory_kwargs)
+        elif ffn_type == "silu":
+            self.ffn = SiLUFFN(d_ff=self.d_ff, d_model=self.d_model, **factory_kwargs)
+        else:
+            raise ValueError(f"Unknown ffn_type: {ffn_type}")
+            
         self.ln2 = RMSNorm(d_model=self.d_model, eps=self.eps, **factory_kwargs)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
