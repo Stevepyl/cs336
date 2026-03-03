@@ -63,3 +63,6 @@ skip-magic-trailing-comma = false
 
 [tool.ty.rules]
 invalid-argument-type = "ignore"
+
+[tool.ty.src]
+exclude = ["cs336_basics/generate.py"]

@@ -1,7 +1,7 @@
 defaults:
   - hydra: default
   - data: default
-  - model: tinystories
+  - model: default
   - optimizer: adamw
   - training: default
   - logger: wandb  # You can change this to tensorboard or swanlab

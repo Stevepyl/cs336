@@ -41,7 +41,7 @@ class RMSNorm(nn.Module):
         self.d_model = d_model
         self.eps = eps
         factory_kwargs = {"device": device, "dtype": dtype}
-        self.weight = nn.Parameter(torch.empty(d_model, **factory_kwargs))
+        self.weight = nn.Parameter(torch.empty(d_model, **factory_kwargs))  # ty:ignore[no-matching-overload]
 
     def forward(self, x: Float[Tensor, " ... d_model"]) -> torch.Tensor:
         """Process an input tensor of shape (batch_size, sequence_length, d_model) 
@@ -177,6 +177,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.output_proj = Linear(d_model, d_model, **factory_kwargs)
         if (theta is not None) and (max_seq_len is not None):
             self.rope = get_rope(theta, self.d_k, max_seq_len)
+        self.cache = None # kv_cache will be managed by inference manager
 
     def forward(
         self, 
@@ -184,7 +185,6 @@ class MultiHeadSelfAttention(nn.Module):
         token_positions: Int[Tensor, " ... sequence_length"] | None = None,
     ) -> torch.Tensor: # Same shape of x
         seq_len = x.shape[-2]
-        mask = torch.ones(seq_len, seq_len, device=x.device, dtype=x.dtype).tril()
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
@@ -199,7 +199,20 @@ class MultiHeadSelfAttention(nn.Module):
         if token_positions is not None:
             q = self.rope(q, token_positions)
             k = self.rope(k, token_positions)
-        
+            
+        # kv cache update
+        if self.cache is not None and token_positions is not None:
+            k, v = self.cache.update(token_positions, k, v)
+            cache_len = int(token_positions[0].item())  # assuming all positions are the same in the batch
+            mask = torch.hstack(
+                [
+                    torch.ones((seq_len, cache_len), device=x.device, dtype=x.dtype),
+                    torch.ones((seq_len, seq_len), device=x.device, dtype=x.dtype).tril(),
+                ],
+            )
+        else:
+            mask = torch.ones((seq_len, seq_len), device=x.device, dtype=x.dtype).tril()
+
         multi_head = scaled_dot_product_attention(q, k, v, mask)
         # read multi_head = concat(head_1, ... , head_h)
         multi_head = rearrange(multi_head, "b h s d -> b s (h d)")
