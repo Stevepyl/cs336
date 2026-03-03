@@ -1,2 +1,2 @@
-path: "data/TinyStoriesV2-GPT4-train.txt"
-
+path: "data/tinystories"
+tokenizer_path: "tokenizer/tinystories"

@@ -16,6 +16,7 @@ dependencies = [
   "ty>=0.0.10",
   "swanlab>=0.7.6",
   "hydra-core>=1.3.2",
+  "pandas>=2.3.3",
 ]
 description = "CS336 Assignment 1"
 name = "cs336_basics"
@@ -64,3 +65,10 @@ build-dir = "build/{wheel_tag}"
 
 [project.scripts]
 cs336_basics = "cs336_basics:main"
+[tool.ty]
+
+[tool.ty.rules]
+invalid-argument-type = "ignore"
+
+[tool.ty.src]
+exclude = ["cs336_basics/generate.py"]

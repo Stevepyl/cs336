@@ -159,11 +159,12 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-.ruff_cache/
-*.zip
 /data/
 /outputs/
 /tokenizer/
+.ruff_cache/
+/wandb/
+*.zip
 test.py
 .DS_Store
 .vscode

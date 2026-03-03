@@ -59,4 +59,23 @@ def gradient_clipping(
     if total_norm >= max_l2_norm:
         for p in parameters:
             if p.grad is not None:
-                p.grad.mul_(max_l2_norm / total_norm + eps)
+                p.grad.mul_(max_l2_norm / (total_norm + eps))
+
+
+def compute_entropy_chunked(logits: torch.Tensor, chunk_size: int = 128) -> torch.Tensor:
+    """
+        Memory-efficient implementation of `compute_entropy`.
+    """
+    
+    num_chunks = (logits.shape[1] + chunk_size - 1) // chunk_size
+    entropy_chunks = []
+    for i in range(num_chunks):
+        start_idx = i * chunk_size
+        end_idx = min((i + 1) * chunk_size, logits.shape[1])
+        chunk_logits = logits[:, start_idx:end_idx, :]
+        # Use the numerically stable method for torch.bfloat16, do not use logsumexp
+        chunk_probs = chunk_logits.softmax(dim=-1)
+        chunk_log_probs = chunk_logits.log_softmax(dim=-1)
+        chunk_entropy = -(chunk_probs * chunk_log_probs).sum(dim=-1)
+        entropy_chunks.append(chunk_entropy)
+    return torch.cat(entropy_chunks, dim=1)

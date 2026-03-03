@@ -1,9 +1,48 @@
+from turtle import position
+from click.core import batch
 import torch
 import torch.nn as nn
 
-from .pre_norm_block import RMSNorm, SwiGLUFFN, MultiHeadSelfAttention
+from .pre_norm_block import RMSNorm, SwiGLUFFN, SiLUFFN, MultiHeadSelfAttention
 from .basic_block import Embedding, Linear
 from .utils import softmax
+
+
+class KVCache(nn.Module):
+    def __init__(
+        self,
+        batch_size: int,
+        num_heads: int,
+        max_seq_len: int,
+        head_dim: int,
+        dtype: torch.dtype | None = None,
+        device: str| torch.device | None = None,
+    ):
+        super().__init__()
+        cache_shape = (batch_size, num_heads, max_seq_len, head_dim)
+        self.register_buffer("k_cache", torch.zeros(cache_shape, dtype=dtype, device=device))
+        self.register_buffer("v_cache", torch.zeros(cache_shape, dtype=dtype, device=device))
+        
+    def update(self, positions, xk, xv):
+        """_summary_
+
+        Args:
+            positions (_type_): 通常是一个索引数组(例如 [10]，表示当前正在处理第 11 个 Token)
+            xk (_type_): _description_
+            xv (_type_): _description_
+        """
+        seq_len = xk.size(2)  # 当前输入的序列长度(通常推理时为1)
+        start_pos = positions[0].item()  # 获取当前起始位置索引
+        
+        # Filling
+        self.k_cache[:, :, positions] = xk  # 将当前计算出的 Key 向量精准地插入到预分配好的“大表”中的对应位置。# ty:ignore[invalid-assignment]
+        self.v_cache[:, :, positions] = xv  # ty:ignore[invalid-assignment]
+        
+        k_cache = self.k_cache[:, :, :start_pos + seq_len]  # ty:ignore[not-subscriptable]
+        v_cache = self.v_cache[:, :, : start_pos + seq_len]  # ty:ignore[not-subscriptable]
+        
+        return k_cache, v_cache
+
 
 class TransformerLM(nn.Module):
     def __init__(
@@ -15,12 +54,13 @@ class TransformerLM(nn.Module):
         num_heads: int,
         d_ff: int,
         rope_theta: float,
-        device: torch.device | None = None,
+        device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
+        **kwargs,
     ):
         super().__init__()
         self.vocab_size = vocab_size
-        self.context_length = context_length # max_seq_len
+        self.context_length = context_length  # max_seq_len
         self.d_model = d_model
         self.num_layers = num_layers
         self.num_heads = num_heads
@@ -28,21 +68,28 @@ class TransformerLM(nn.Module):
         self.rope_theta = rope_theta
         factory_kwargs = {"device": device, "dtype": dtype}
 
-        self.token_embeddings = Embedding(
-            num_embeddings=vocab_size, embedding_dim=d_model, **factory_kwargs)
-        self.layers = nn.ModuleList([
-            TransformerBlock(
-                d_model, num_heads, d_ff, context_length, rope_theta, **factory_kwargs,
-            ) for _ in range(num_layers)
-        ])
+        self.token_embeddings = Embedding(num_embeddings=vocab_size, embedding_dim=d_model, **factory_kwargs)
+        self.layers = nn.ModuleList(
+            [
+                TransformerBlock(
+                    d_model,
+                    num_heads,
+                    d_ff,
+                    context_length,
+                    rope_theta,
+                    **factory_kwargs,
+                )
+                for _ in range(num_layers)
+            ],
+        )
         self.ln_final = RMSNorm(d_model, **factory_kwargs)
         self.lm_head = Linear(in_features=d_model, out_features=vocab_size)
-        
+
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
         seq_len = x.shape[1]
         assert seq_len <= self.context_length, "Sequence length exceeds model capacity"
         x = self.token_embeddings(x)
-        
+
         for layer in self.layers:
             x = layer(x, token_positions)
         x = self.ln_final(x)
@@ -62,6 +109,7 @@ class TransformerBlock(nn.Module):
         eps: float = 1e-5,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
+        **kwargs,
     ) -> None:
         super().__init__()
         self.d_model = d_model
@@ -71,8 +119,8 @@ class TransformerBlock(nn.Module):
         self.theta = theta
         self.max_seq_len = max_seq_len
         factory_kwargs = {"device": device, "dtype": dtype}
-        self.ln1 = RMSNorm(d_model=self.d_model,
-                           eps=self.eps, **factory_kwargs)
+        ffn_type = kwargs.get("ffn_type", "swiglu")
+        self.ln1 = RMSNorm(d_model=self.d_model, eps=self.eps, **factory_kwargs)
 
         self.attn = MultiHeadSelfAttention(
             d_model=self.d_model,
@@ -81,13 +129,14 @@ class TransformerBlock(nn.Module):
             max_seq_len=self.max_seq_len,
             **factory_kwargs,
         )
-        self.ffn = SwiGLUFFN(
-            d_ff=self.d_ff,
-            d_model=self.d_model,
-            **factory_kwargs,
-        )
-        self.ln2 = RMSNorm(d_model=self.d_model,
-                           eps=self.eps, **factory_kwargs)
+        if ffn_type == "swiglu":
+            self.ffn = SwiGLUFFN(d_ff=self.d_ff,d_model=self.d_model,**factory_kwargs)
+        elif ffn_type == "silu":
+            self.ffn = SiLUFFN(d_ff=self.d_ff, d_model=self.d_model, **factory_kwargs)
+        else:
+            raise ValueError(f"Unknown ffn_type: {ffn_type}")
+            
+        self.ln2 = RMSNorm(d_model=self.d_model, eps=self.eps, **factory_kwargs)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
         x = x + self.attn(self.ln1(x), token_positions)
