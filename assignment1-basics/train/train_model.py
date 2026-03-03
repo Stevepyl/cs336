@@ -127,7 +127,7 @@ def main(cfg: DictConfig):
         # Learning rate schedule
         lr = cosine_learning_rate_schedule(
             it,
-            cfg.optimzier.max_lr,
+            cfg.optimizer.max_lr,
             cfg.optimizer.min_lr,
             cfg.optimizer.warmup_iters,
             cfg.training.max_iters,
@@ -136,7 +136,7 @@ def main(cfg: DictConfig):
             param_group["lr"] = lr
         
         # Get a batch of data
-        x, y = get_batch(train_data, cfg.training.batch_size, cfg.training.context_length, device)
+        x, y = get_batch(train_data, cfg.training.batch_size, cfg.model.context_length, device)
         
         # Forward pass
         logits = model(x)
