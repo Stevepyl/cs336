@@ -51,10 +51,10 @@ def generate(
     for i in range(max_new_tokens):
         if use_kv_cache:
             if i == 0:
-                token_positions = torch.arange(idx.size(1), device=idx.device)
+                token_positions = torch.arange(idx.size(1), dtype=torch.long, device=idx.device)
                 logits= model(idx, token_positions)
             else:
-                token_positions = torch.Tensor([idx.size(1) - 1], device = idx.device)
+                token_positions = torch.Tensor([idx.size(1) - 1], dtype=torch.long, device=idx.device)
                 logits = model(idx[:, -1:], token_positions)
         else:
             idx_cond = idx[:, -block_size:]

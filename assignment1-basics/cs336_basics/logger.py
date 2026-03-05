@@ -20,7 +20,7 @@ class Logger:
         }
         
         if hasattr(config.logger, "run_name") and config.logger.run_name is not None:
-            init_kwargs["run_name"] = config.logger.run_name
+            init_kwargs["name"] = config.logger.run_name
             
         if self.logger_type == "swanlab":
             import swanlab

@@ -125,11 +125,11 @@ class RotaryPositionalEmbedding(nn.Module):
     def forward(
         self,
         x: Float[Tensor, " batch_size sequence_length d_k"],
-        token_positions: Float[Tensor, " ... sequence_length"],
+        token_positions: Int[Tensor, " ... sequence_length"],
     ) -> torch.Tensor:
         x = x.view(*x.shape[:-1], -1, 2)
         x = torch.view_as_complex(x)
-        self.angles.to(dtype=x.dtype)
+        token_positions = token_positions.to(device=self.angles.device, dtype=torch.long)
         if self.angles[token_positions].ndim == 3: #type: ignore
             x_rotated = x * self.angles[token_positions].unsqueeze(1) # type: ignore
         else:
@@ -140,8 +140,8 @@ class RotaryPositionalEmbedding(nn.Module):
     def _compute_rotate_angles(self):
         # holds the speed at which each dimension pair rotates.
         # shape: (self.d_k / 2, )
-        freqs = 1.0 / (self.theta ** (torch.arange(0, self.d_k, 2, dtype=torch.float32).float() / self.d_k))
-        positions = torch.arange(end=self.max_seq_len, dtype=torch.float32)
+        freqs = 1.0 / (self.theta ** (torch.arange(0, self.d_k, 2).float() / self.d_k))
+        positions = torch.arange(end=self.max_seq_len, device=freqs.device).float()
         angles = torch.outer(positions, freqs)
         # Creates a complex tensor where real part is cos and imag part is sin
         # Equal to torch.complex(torch.cos(freqs), torch.sin(freqs))

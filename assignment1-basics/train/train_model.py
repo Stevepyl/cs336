@@ -51,7 +51,7 @@ def evaluate(model: TransformerLM, data, cfg, device):
     model.eval()
     losses = []
     entropies= []
-    for k in tqdm(range(cfg.eval_iters), desc="Evaluating", leave=False):
+    for k in tqdm(range(cfg.training.eval_iters), desc="Evaluating", leave=False):
         x, y = get_batch(data, cfg.training.batch_size, cfg.model.context_length, device)
         logits = model(x)
         loss = cross_entropy_loss(logits, y)
