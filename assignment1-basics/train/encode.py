@@ -84,14 +84,12 @@ def main():
     print(f"Loading tokenizer from {TS_TOKENIZER_PATH}")
     encode_to_bin(ts_vocab, ts_merges, ts_special, "TinyStoriesV2-GPT4-train")
     encode_to_bin(ts_vocab, ts_merges, ts_special, "TinyStoriesV2-GPT4-valid")
-    encode_to_bin(ts_vocab, ts_merges, ts_special, "ts_test")
 
     owt_vocab = os.path.join(OWT_TOKENIZER_PATH, "vocab.json")
     owt_merges = os.path.join(OWT_TOKENIZER_PATH, "merges.txt")
     owt_special = ["<|endoftext|>"]
     encode_to_bin(owt_vocab, owt_merges, owt_special, "owt_train")
     encode_to_bin(owt_vocab, owt_merges, owt_special, "owt_valid")
-    encode_to_bin(owt_vocab, owt_merges, owt_special, "owt_test")
 
 
 if __name__ == "__main__":
