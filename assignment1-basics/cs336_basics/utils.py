@@ -31,12 +31,10 @@ def cross_entropy_loss(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    m = inputs.max(dim=-1, keepdim=True).values
+    inputs = inputs - inputs.max(dim=-1, keepdim=True).values
     #  If your logits (o_i) are very large (e.g., 500), exp(500) will result in inf (infinity), crashing your program.
-    log_sum_exp = m + torch.log(torch.sum((inputs - m).exp(), dim=-1, keepdim=True))
-    # logits = inputs[range(inputs.shape[0]), targets]
-    logits = torch.gather(inputs, dim=-1, index=targets.unsqueeze(-1))
-    return torch.mean(-(logits - log_sum_exp))
+    log_probs = inputs - torch.logsumexp(inputs, dim=-1, keepdim=True) 
+    return -log_probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1).mean()
 
 def get_perplexity(
     inputs: Float[Tensor, " batch_size vocab_size"],
@@ -49,7 +47,7 @@ def gradient_clipping(
     parameters: Iterable[torch.nn.Parameter],
     max_l2_norm: float,
     eps: float = 1e-6,
-) -> None:
+) -> float:
     total_norm = 0.0
     for p in parameters:
         if p.grad is not None:
@@ -60,6 +58,7 @@ def gradient_clipping(
         for p in parameters:
             if p.grad is not None:
                 p.grad.mul_(max_l2_norm / (total_norm + eps))
+    return total_norm
 
 
 def compute_entropy_chunked(logits: torch.Tensor, chunk_size: int = 128) -> torch.Tensor:

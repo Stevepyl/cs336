@@ -22,7 +22,7 @@ case "$train_mode" in
         ;;
     tinystories_full)
         data_path='data/TinyStoriesV2-GPT4-train.txt'
-        vocab_size=32000
+        vocab_size=10000
         tokenizer='tinystories'
         ;;
     owt_full)
