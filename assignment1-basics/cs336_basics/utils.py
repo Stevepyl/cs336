@@ -47,7 +47,7 @@ def gradient_clipping(
     parameters: Iterable[torch.nn.Parameter],
     max_l2_norm: float,
     eps: float = 1e-6,
-) -> None:
+) -> float:
     total_norm = 0.0
     for p in parameters:
         if p.grad is not None:
@@ -58,6 +58,7 @@ def gradient_clipping(
         for p in parameters:
             if p.grad is not None:
                 p.grad.mul_(max_l2_norm / (total_norm + eps))
+    return total_norm
 
 
 def compute_entropy_chunked(logits: torch.Tensor, chunk_size: int = 128) -> torch.Tensor:

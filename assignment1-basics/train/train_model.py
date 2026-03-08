@@ -55,12 +55,13 @@ def evaluate(model: TransformerLM, data, cfg, device):
         x, y = get_batch(data, cfg.training.batch_size, cfg.model.context_length, device)
         logits = model(x)
         loss = cross_entropy_loss(logits, y)
-        losses.append(loss)
+        losses.append(loss.item())
         entropies.append(compute_entropy_chunked(logits).mean().item())
     model.train()
+    mean_loss = np.mean(losses)
     return {
-        "val/loss": np.mean(losses),
-        "val/perplexity": np.exp(losses),
+        "val/loss": mean_loss,
+        "val/perplexity": np.exp(mean_loss),
         "val/entropy": np.mean(entropies),
     }
     
@@ -165,7 +166,7 @@ def main(cfg: DictConfig):
             }, step=it)
 
         # ================= Eval and Checkpointing =================
-        if it > 0 and (it % cfg.training.log_interval == 0 or it == cfg.training.max_iters - 1):
+        if it > 0 and (it % cfg.training.eval_interval == 0 or it == cfg.training.max_iters - 1):
             metrics = evaluate(model, valid_data, cfg, device)
             tqdm.write(f"iter {it}: val loss={metrics['val/loss']:.4f}")
             logger.log_metrics(metrics, it)
@@ -173,7 +174,8 @@ def main(cfg: DictConfig):
             if cfg.training.save_checkpoint:
                 checkpoint_path = output_dir / f"checkpoint_{it}.pt"
                 tqdm.write(f"saving checkpoint {it} to {checkpoint_path}")
-                save_checkpoint(model, optimizer, it, checkpoint_path)
+                raw_model = model._orig_mod if cfg.training.is_compile else model
+                save_checkpoint(raw_model, optimizer, it, checkpoint_path)
         
     tqdm.write("Training finished...")
         
