@@ -176,6 +176,7 @@ class MultiHeadSelfAttention(nn.Module):
         # o_proj is actually d_model in and h * d_v out
         self.output_proj = Linear(d_model, d_model, **factory_kwargs)
         if (theta is not None) and (max_seq_len is not None):
+            self.theta = theta
             self.rope = get_rope(theta, self.d_k, max_seq_len)
         self.cache = None # kv_cache will be managed by inference manager
 

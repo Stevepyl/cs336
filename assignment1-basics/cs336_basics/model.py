@@ -12,7 +12,7 @@ class KVCache(nn.Module):
         batch_size: int,
         num_heads: int,
         max_seq_len: int,
-        head_dim: int,
+        head_dim: int, # d_k, which equals to d_model / heads num
         dtype: torch.dtype | None = None,
         device: str| torch.device | None = None,
     ):

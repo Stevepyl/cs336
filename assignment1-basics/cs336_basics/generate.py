@@ -54,7 +54,8 @@ def generate(
                 token_positions = torch.arange(idx.size(1), dtype=torch.long, device=idx.device)
                 logits= model(idx, token_positions)
             else:
-                token_positions = torch.Tensor([idx.size(1) - 1], dtype=torch.long, device=idx.device)
+                # Wrong: torch.Tensor (uppercase T) — legacy constructor, no dtype/device kwargs
+                token_positions = torch.tensor([idx.size(1) - 1], dtype=torch.long, device=idx.device)
                 logits = model(idx[:, -1:], token_positions)
         else:
             idx_cond = idx[:, -block_size:]
@@ -89,14 +90,14 @@ def install_kv_cache(model: TransformerLM, batch_size: int, total_len: int):
             batch_size=batch_size,
             num_heads=layer.attn.num_heads,
             max_seq_len=total_len,
-            head_dim=layer.attn.head_dim,
+            head_dim=layer.attn.d_k,
             dtype=layer_dtype,
             device=layer_device,
         )
         if layer.attn.rope.max_seq_len < total_len:
             layer.attn.rope = get_rope(
                 theta=layer.attn.theta,
-                d_k=layer.attn.head_dim,
+                d_k=layer.attn.d_k,
                 max_seq_len=total_len,
             ).to(device=layer_device, dtype=layer_dtype)
 
@@ -109,6 +110,6 @@ def remove_kv_cache(model: TransformerLM):
         layer.attn.cache = None
         layer.attn.rope = get_rope(
             theta=layer.attn.theta,
-            d_k=layer.attn.head_dim,
+            d_k=layer.attn.d_k,
             max_seq_len=model.max_seq_len,
         ).to(device=layer_device, dtype=layer_dtype)

@@ -94,6 +94,7 @@ def main(cfg: DictConfig):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.cuda.empty_cache()
     print(f"Using device: {device}")
+    torch.set_float32_matmul_precision("high")
 
     # ================= Loading data =================
     print(f"Loading data...")
