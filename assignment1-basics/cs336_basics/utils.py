@@ -61,6 +61,12 @@ def gradient_clipping(
     return total_norm
 
 
+def norm(x: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    """Functional RMS normalization without learnable parameters"""
+    var = x.pow(2).mean(dim=-1, keepdim=True) + eps
+    return x * var.rsqrt()
+
+
 def compute_entropy_chunked(logits: torch.Tensor, chunk_size: int = 128) -> torch.Tensor:
     """
         Memory-efficient implementation of `compute_entropy`.

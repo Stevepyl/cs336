@@ -64,6 +64,8 @@ class TransformerLM(nn.Module):
         self.num_heads = num_heads
         self.d_ff = d_ff
         self.rope_theta = rope_theta
+        remove_rmsnorm = kwargs.get("remove_rmsnorm", False)
+        tie_embeddings = kwargs.get('tie_embeddings', False)
         factory_kwargs = {"device": device, "dtype": dtype}
 
         self.token_embeddings = Embedding(num_embeddings=vocab_size, embedding_dim=d_model, **factory_kwargs)
@@ -76,12 +78,20 @@ class TransformerLM(nn.Module):
                     context_length,
                     rope_theta,
                     **factory_kwargs,
+                    **kwargs,
                 )
                 for _ in range(num_layers)
             ],
         )
-        self.ln_final = RMSNorm(d_model, **factory_kwargs)
+        
+        if remove_rmsnorm:
+            self.ln_final = nn.Identity() 
+        else:
+            self.ln_final = RMSNorm(d_model, **factory_kwargs)
         self.lm_head = Linear(in_features=d_model, out_features=vocab_size)
+        if tie_embeddings:
+            self.lm_head.weight = self.token_embeddings.weight
+        
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
         seq_len = x.shape[1]
@@ -128,6 +138,7 @@ class TransformerBlock(nn.Module):
             theta=self.theta,
             max_seq_len=self.max_seq_len,
             **factory_kwargs,
+            **kwargs,
         )
         if ffn_type == "swiglu":
             self.ffn = SwiGLUFFN(d_ff=self.d_ff,d_model=self.d_model,**factory_kwargs)
