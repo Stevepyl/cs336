@@ -139,7 +139,7 @@ def main(cfg: DictConfig):
     )
     optimizer_muon = Muon(
         hidden_matrix_params,
-        lr=cfg.optimizer.max_lr,
+        lr=cfg.optimizer.muon_lr,
         momentum=0.95,
         weight_decay=cfg.optimizer.weight_decay,
     )
