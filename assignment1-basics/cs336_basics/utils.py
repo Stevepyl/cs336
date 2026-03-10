@@ -54,6 +54,7 @@ def gradient_clipping(
             param_norm = p.grad.data.norm(2)
             total_norm += param_norm.item() ** 2
     total_norm = total_norm**0.5
+    # total_norm is l2 norm of the gradients
     if total_norm >= max_l2_norm:
         for p in parameters:
             if p.grad is not None:

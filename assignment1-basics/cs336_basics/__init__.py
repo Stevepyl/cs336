@@ -27,6 +27,7 @@ from .utils import (
 
 from .optimizer import (
     AdamW,
+    Muon,
     cosine_learning_rate_schedule,
 )
 
