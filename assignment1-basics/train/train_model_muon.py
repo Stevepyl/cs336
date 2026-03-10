@@ -84,7 +84,7 @@ def setup(cfg: DictConfig):
         cfg.optimizer.mm_warmup_steps = cfg.optimizer.warmup_iters
 
 
-@hydra.main(version_base="1.3", config_path="../conf", config_name="train_config")
+@hydra.main(version_base="1.3", config_path="../conf", config_name="train_muon_config")
 def main(cfg: DictConfig):
     setup(cfg)
 
