@@ -28,6 +28,7 @@ from cs336_basics import (
     scaled_dot_product_attention,
     train_bpe,
     AdamW,
+    Muon,
     cosine_learning_rate_schedule,
     get_batch,
     load_checkpoint,

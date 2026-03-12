@@ -23,6 +23,15 @@ uv run pytest -k "test_name"     # Run tests matching pattern
 # Linting and formatting (uses ruff)
 uv run ruff check .              # Check for lint errors
 uv run ruff format .             # Format code
+
+# Training (Hydra-based, outputs to outputs/)
+uv run python train/train_model.py                          # Train with default config
+uv run python train/train_model.py model=default training.max_iters=5000  # Override config keys
+uv run python train/train_model.py --config-name train_muon_config  # Use Muon optimizer
+
+# Tokenizer training
+uv run python train/train_tokenizer.py
+uv run python train/encode.py                              # Encode corpus to token IDs
 ```
 
 ## Architecture
@@ -31,10 +40,17 @@ uv run ruff format .             # Format code
 - `bpe.py` / `tokenizer.py`: BPE tokenizer training and inference
 - `basic_block.py`: Foundational layers (`Linear`, `Embedding`, `softmax`, `cross_entropy_loss`)
 - `pre_norm_block.py`: Modern Transformer components (`RMSNorm`, `SwiGLUFFN`, `RotaryPositionalEmbedding`, `MultiHeadSelfAttention`)
-- `model.py`: High-level components (`TransformerBlock`, `TransformerLM`)
+- `model.py`: High-level components (`TransformerBlock`, `TransformerLM`, `KVCache`)
+- `generate.py`: Autoregressive generation with top-p sampling and optional KV cache (`generate()`)
 - `optimizer.py`: `AdamW` optimizer and `cosine_learning_rate_schedule`
 - `data_loader.py`: `get_batch()` for sampling training batches
 - `checkpoint.py`: Model serialization (`save_checkpoint`, `load_checkpoint`)
+- `config.py`: Dataclass configs (`ModelConfig`, `TrainingConfig`, `AdamWOptimizerConfig`, `TrainConfig`, etc.)
+
+### Configuration System
+Training uses [Hydra](https://hydra.cc/) for config composition. YAML files live in `conf/` with subdirectories for `model/`, `optimizer/`, `training/`, `logger/`, and `data/`. The entry point configs are `conf/train_config.yaml` (AdamW) and `conf/train_muon_config.yaml` (Muon optimizer). Override any field on the CLI with `key=value` syntax.
+
+`ModelConfig` supports ablation flags: `ffn_type` (`swiglu`/`silu`), `use_post_norm`, `remove_rmsnorm`, `remove_rope`.
 
 ### Training Scripts (`train/`)
 - `train_tokenizer.py`: Train BPE tokenizer on corpus

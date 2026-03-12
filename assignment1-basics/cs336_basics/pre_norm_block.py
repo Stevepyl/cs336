@@ -10,6 +10,7 @@ from cs336_basics.basic_block import Linear
 from cs336_basics.utils import (
     silu,
     softmax,
+    norm,
 )
 
 
@@ -163,6 +164,7 @@ class MultiHeadSelfAttention(nn.Module):
         max_seq_len: int | None = None,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
+        **kwargs,
     ) -> None:
         # Following Attention is All You Need, set d_k = d_v = d_model/h
         super().__init__()
@@ -175,8 +177,19 @@ class MultiHeadSelfAttention(nn.Module):
         self.v_proj = Linear(d_model, d_model, **factory_kwargs)
         # o_proj is actually d_model in and h * d_v out
         self.output_proj = Linear(d_model, d_model, **factory_kwargs)
+        
+        remove_rope: bool = kwargs.get("remove_rope", False)
+        self.add_qknorm: bool = kwargs.get("add_qknorm", False)
         if (theta is not None) and (max_seq_len is not None):
-            self.rope = get_rope(theta, self.d_k, max_seq_len)
+            self.theta = theta
+            if not remove_rope:
+                self.rope = get_rope(theta, self.d_k, max_seq_len)
+            else:
+                self.rope = None
+        
+        if self.add_qknorm:
+            print("Using QK normalization in TransformerAttention")
+        
         self.cache = None # kv_cache will be managed by inference manager
 
     def forward(
@@ -196,7 +209,11 @@ class MultiHeadSelfAttention(nn.Module):
         k = rearrange(k, "b s (h d) ->  b h s d", h=self.num_heads).contiguous()
         v = rearrange(v, "b s (h d) ->  b h s d", h=self.num_heads).contiguous()
         
-        if token_positions is not None:
+        if self.add_qknorm:
+            q = norm(q)
+            k = norm(k)
+        
+        if (token_positions is not None) and (self.rope is not None):
             q = self.rope(q, token_positions)
             k = self.rope(k, token_positions)
             

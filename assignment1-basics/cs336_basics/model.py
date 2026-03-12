@@ -12,7 +12,7 @@ class KVCache(nn.Module):
         batch_size: int,
         num_heads: int,
         max_seq_len: int,
-        head_dim: int,
+        head_dim: int, # d_k, which equals to d_model / heads num
         dtype: torch.dtype | None = None,
         device: str| torch.device | None = None,
     ):
@@ -64,6 +64,8 @@ class TransformerLM(nn.Module):
         self.num_heads = num_heads
         self.d_ff = d_ff
         self.rope_theta = rope_theta
+        remove_rmsnorm = kwargs.get("remove_rmsnorm", False)
+        tie_embeddings = kwargs.get('tie_embeddings', False)
         factory_kwargs = {"device": device, "dtype": dtype}
 
         self.token_embeddings = Embedding(num_embeddings=vocab_size, embedding_dim=d_model, **factory_kwargs)
@@ -76,12 +78,20 @@ class TransformerLM(nn.Module):
                     context_length,
                     rope_theta,
                     **factory_kwargs,
+                    **kwargs,
                 )
                 for _ in range(num_layers)
             ],
         )
-        self.ln_final = RMSNorm(d_model, **factory_kwargs)
+        
+        if remove_rmsnorm:
+            self.ln_final = nn.Identity() 
+        else:
+            self.ln_final = RMSNorm(d_model, **factory_kwargs)
         self.lm_head = Linear(in_features=d_model, out_features=vocab_size)
+        if tie_embeddings:
+            self.lm_head.weight = self.token_embeddings.weight
+        
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
         seq_len = x.shape[1]
@@ -118,7 +128,9 @@ class TransformerBlock(nn.Module):
         self.max_seq_len = max_seq_len
         factory_kwargs = {"device": device, "dtype": dtype}
         ffn_type = kwargs.get("ffn_type", "swiglu")
-        self.ln1 = RMSNorm(d_model=self.d_model, eps=self.eps, **factory_kwargs)
+        use_post_norm = kwargs.get("use_post_norm", False)
+        remove_rmsnorm = kwargs.get("remove_rmsnorm", False)
+        
 
         self.attn = MultiHeadSelfAttention(
             d_model=self.d_model,
@@ -126,6 +138,7 @@ class TransformerBlock(nn.Module):
             theta=self.theta,
             max_seq_len=self.max_seq_len,
             **factory_kwargs,
+            **kwargs,
         )
         if ffn_type == "swiglu":
             self.ffn = SwiGLUFFN(d_ff=self.d_ff,d_model=self.d_model,**factory_kwargs)
@@ -133,10 +146,20 @@ class TransformerBlock(nn.Module):
             self.ffn = SiLUFFN(d_ff=self.d_ff, d_model=self.d_model, **factory_kwargs)
         else:
             raise ValueError(f"Unknown ffn_type: {ffn_type}")
-            
-        self.ln2 = RMSNorm(d_model=self.d_model, eps=self.eps, **factory_kwargs)
+        self.use_post_norm = use_post_norm
+        if remove_rmsnorm:
+            # nn.Identity() creates a module that does nothing to its input and returns it unchanged.
+            self.ln1 = nn.Identity()
+            self.ln2 = nn.Identity()
+        else:
+            self.ln1 = RMSNorm(d_model=self.d_model, eps=self.eps, **factory_kwargs)
+            self.ln2 = RMSNorm(d_model=self.d_model, eps=self.eps, **factory_kwargs)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
-        x = x + self.attn(self.ln1(x), token_positions)
-        x = x + self.ffn(self.ln2(x))
+        if self.use_post_norm:
+            x = self.ln1(x + self.attn(x, token_positions))
+            x = self.ln2(x + self.ffn(x))
+        else:
+            x = x + self.attn(self.ln1(x), token_positions)
+            x = x + self.ffn(self.ln2(x))
         return x

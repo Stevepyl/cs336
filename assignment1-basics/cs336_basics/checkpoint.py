@@ -23,6 +23,7 @@ def load_checkpoint(
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
 ) -> int:
+    # TODO: Adding support for multiple optimizers of loading checkpoint
     checkpoint = torch.load(src)
     model.load_state_dict(checkpoint["model_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
