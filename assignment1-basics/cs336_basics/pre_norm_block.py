@@ -42,7 +42,7 @@ class RMSNorm(nn.Module):
         self.d_model = d_model
         self.eps = eps
         factory_kwargs = {"device": device, "dtype": dtype}
-        self.weight = nn.Parameter(torch.empty(d_model, **factory_kwargs))  # ty:ignore[no-matching-overload]
+        self.weight = nn.Parameter(torch.ones(d_model, **factory_kwargs))  # ty:ignore[no-matching-overload]
 
     def forward(self, x: Float[Tensor, " ... d_model"]) -> torch.Tensor:
         """Process an input tensor of shape (batch_size, sequence_length, d_model) 
