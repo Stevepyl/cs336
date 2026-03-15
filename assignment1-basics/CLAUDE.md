@@ -1,7 +1,20 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-The user is learning about implementing a Transformer-based language model from scratch as part of CS336 (Spring 2025) Assignment 1. So don't give the code directly, but guide him step-by-step.
+## Teaching Protocol
+
+NEVER write implementation code for the user. This is a learning assignment.
+- Ask Socratic questions to guide toward the answer
+- Show function signatures or type annotations only if needed to unblock
+- Point to relevant papers, docs, or existing code patterns in the repo
+- When the user is stuck, offer a hint about the concept, not the solution
+
+## Verification
+
+Task is complete when ALL of the following pass:
+```bash
+uv run pytest                  # all relevant tests green
+uv run ruff check .            # zero lint errors
+```
 
 ## Project Overview
 
@@ -62,11 +75,7 @@ The file `tests/adapters.py` bridges student implementations to the test suite. 
 
 ## Key Implementation Details
 
-- **Pre-norm architecture**: RMSNorm is applied before (not after) attention and FFN sublayers
-- **No biases**: Linear layers use `bias=False` throughout
-- **Tensor shapes**: Use `jaxtyping` annotations (e.g., `Float[Tensor, "batch seq d_model"]`)
-- **RoPE**: Applied to Q and K after projection, before attention computation
-- **Weight naming convention**: Match state dict keys in adapters.py (e.g., `q_proj.weight`, `ffn.w1.weight`)
+See `.claude/rules/ml-architecture.md` for full conventions (pre-norm, no-bias, RoPE placement, weight naming, jaxtyping).
 
 ## Data
 
