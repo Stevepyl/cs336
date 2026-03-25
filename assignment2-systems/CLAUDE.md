@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CS336 Assignment 2 - Systems optimization for transformer language models. Implements benchmarking infrastructure, FlashAttention-2 (PyTorch + Triton), Distributed Data Parallel training (individual + bucketed), and optimizer state sharding.
 
+## Teaching Protocol
+
+NEVER write implementation code for the user. This is a learning assignment.
+- Ask Socratic questions to guide toward the answer
+- Show function signatures or type annotations only if needed to unblock
+- Point to relevant papers, docs, or existing code patterns in the repo
+- When the user is stuck, offer a hint about the concept, not the solution
+
+
 ## Setup
 
 Uses `uv` as the package manager. Dependencies install automatically via `uv run`.
