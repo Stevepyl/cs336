@@ -12,11 +12,17 @@ Project progress tracker for CS336 Assignment 2 (Systems).
 
 ### Part 1 - Benchmarking & Profiling (script deliverables, no automated tests)
 
-- [ ] `benchmarking_script` — timing script for forward/backward passes
-  - Supports model size CLI args, w warmup steps, n timing steps
-  - Calls `torch.cuda.synchronize()` after each step
-  - Uses `timeit.default_timer()` for timing
-  - Deliverable: timings table for all 5 model sizes + writeup responses
+- [x] `benchmarking_script` — timing script for forward/backward passes (4 pts)
+  - **(a)** Script must support:
+    - Initialize a model given hyperparameters (num layers, etc.)
+    - Generate a random batch of data
+    - Run `w` warmup steps, then time `n` measurement steps (forward-only or forward+backward via CLI arg)
+    - Use `timeit.default_timer()` or `timeit` module for timing
+    - Call `torch.cuda.synchronize()` after each step
+  - **(b)** Time all 5 model sizes (Table 1): 5 warmup steps, 10 measurement steps
+    - Report mean and std of forward pass and forward+backward pass timings
+    - Writeup: how long does forward take? backward? is std small?
+  - Deliverable: script + timings table for all 5 model sizes + writeup responses
 
 - [ ] `nsys_profile` — Nsight Systems profiling
   - Use `nsys profile -o result python benchmark.py`
